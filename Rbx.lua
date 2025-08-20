@@ -1,4 +1,4 @@
--- // Teleporter 7 Pos + Rayfield UI + Main Fiture (Fly, NoClip, Speed)
+-- // Teleporter 7 Pos + Rayfield UI + Main Fiture (Fly Camera-Based, NoClip, Speed, Invisible)
 -- // Gunakan di game sendiri / testing. Jangan dipakai untuk eksploit di game orang lain.
 
 -----------------------------
@@ -92,13 +92,13 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false,
 })
 
--- ===== Tab: Main Fiture (baru) =====
+-- ===== Tab: Main Fiture =====
 local TabMain = Window:CreateTab("Main Fiture", "layout-grid")
 
--- ==== Fly ====
+-- ==== Fly (Camera-Based) ====
+-- Joystick/WASD mengikuti arah kamera (maju kamera = terbang ke depan/atas jika kamera menengadah)
 local flyEnabled = false
 local flySpeed   = 60
-local ascendHeld, descendHeld = false, false
 local flyConn -- RenderStepped connection
 
 local function setFly(state)
@@ -107,23 +107,25 @@ local function setFly(state)
 		if flyEnabled then return end
 		flyEnabled = true
 		hum.PlatformStand = false
-		hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-		hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+		hum:ChangeState(Enum.HumanoidStateType.Physics)
 
 		flyConn = RS.RenderStepped:Connect(function()
 			if not flyEnabled then return end
-			if not char or not char.Parent then return end
-			local move = hum.MoveDirection -- arah input WASD/thumbstick
-			local up = (ascendHeld and 1 or 0) - (descendHeld and 1 or 0)
-			-- gunakan kamera untuk arah horizontal
-			local camLook = workspace.CurrentCamera.CFrame.LookVector
-			local flatMove = Vector3.new(move.X, 0, move.Z).Unit
-			if flatMove.Magnitude ~= flatMove.Magnitude then -- NaN guard
-				flatMove = Vector3.zero
-			end
-			local vel = flatMove * flySpeed
-			vel = Vector3.new(vel.X, up * flySpeed, vel.Z)
+			char, hum, hrp = getCharHum()
+			local cam = workspace.CurrentCamera
+			if not cam then return end
+
+			-- Input dari WASD/joystick bawaan
+			local move  = hum.MoveDirection
+			-- Arah kamera (ikut pitch untuk naik/turun)
+			local look  = cam.CFrame.LookVector
+			local right = cam.CFrame.RightVector
+
+			-- Kombinasi X/Z input terhadap orientasi kamera (mengandung komponen Y dari look)
+			local vel = (look * move.Z + right * move.X) * flySpeed
+
 			hrp.AssemblyLinearVelocity = vel
+			hrp.AssemblyAngularVelocity = Vector3.zero
 		end)
 	else
 		if not flyEnabled then return end
@@ -133,20 +135,9 @@ local function setFly(state)
 	end
 end
 
--- keybind naik/turun (E/Q)
-UIS.InputBegan:Connect(function(input, gpe)
-	if gpe then return end
-	if input.KeyCode == Enum.KeyCode.E then ascendHeld = true end
-	if input.KeyCode == Enum.KeyCode.Q then descendHeld = true end
-end)
-UIS.InputEnded:Connect(function(input, gpe)
-	if input.KeyCode == Enum.KeyCode.E then ascendHeld = false end
-	if input.KeyCode == Enum.KeyCode.Q then descendHeld = false end
-end)
-
-TabMain:CreateSection("Fly")
+TabMain:CreateSection("Fly (Camera-Based)")
 TabMain:CreateToggle({
-	Name = "Aktifkan Fly (E naik, Q turun)",
+	Name = "Aktifkan Fly (ikut arah kamera)",
 	CurrentValue = false,
 	Flag = "FlyToggle",
 	Callback = function(on) setFly(on) end,
@@ -196,7 +187,6 @@ TabMain:CreateToggle({
 
 -- ==== Speed Run (WalkSpeed) ====
 local defaultWalkSpeed = 16
-local speedConn
 local function setRunSpeed(v)
 	local _, hum = getCharHum()
 	hum.WalkSpeed = math.clamp(v, 1, 200)
@@ -215,6 +205,28 @@ TabMain:CreateSlider({
 TabMain:CreateButton({
 	Name = "Reset WalkSpeed (16)",
 	Callback = function() setRunSpeed(16) end,
+})
+
+-- ==== Invisible (Local) ====
+-- Membuat karakter tak terlihat di client-mu (pemain lain masih bisa melihat).
+local function setInvisibleLocal(state)
+	local char = player.Character
+	if not char then return end
+	for _, obj in ipairs(char:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			obj.LocalTransparencyModifier = state and 1 or 0
+		elseif obj:IsA("Decal") then
+			obj.Transparency = state and 1 or 0
+		end
+	end
+end
+
+TabMain:CreateSection("Invisible (Local)")
+TabMain:CreateToggle({
+	Name = "Jadikan diri tak terlihat (local)",
+	CurrentValue = false,
+	Flag = "InvisibleLocal",
+	Callback = function(on) setInvisibleLocal(on) end,
 })
 
 -- ===== Tab: Teleporter (seperti sebelumnya) =====
