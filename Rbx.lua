@@ -1,4 +1,4 @@
--- // Teleporter 7 Pos + Rayfield UI
+-- // Teleporter 7 Pos + Rayfield UI + Main Fiture (Fly, NoClip, Speed)
 -- // Gunakan di game sendiri / testing. Jangan dipakai untuk eksploit di game orang lain.
 
 -----------------------------
@@ -8,22 +8,23 @@ local OFFSET_Y = 3
 local POINTS = {
     -- GANTI koordinat sesuai map-mu:
     Vector3.new(388, 310, -185),    -- 1
-    Vector3.new(99, 412, 615),   -- 2
-    Vector3.new(10, 601, 998),    -- 3
-    Vector3.new(871, 865, 583),    -- 4
-    Vector3.new(1622, 1080, 157),     -- 5
+    Vector3.new(99, 412, 615),      -- 2
+    Vector3.new(10, 601, 998),      -- 3
+    Vector3.new(871, 865, 583),     -- 4
+    Vector3.new(1622, 1080, 157),   -- 5
     Vector3.new(2969, 1528, 708),   -- 6
-    Vector3.new(1803, 1982, 2169),   -- 7
-    Vector3.new(516, 14, -994),   -- Basecamp
+    Vector3.new(1803, 1982, 2169),  -- 7
+    Vector3.new(516, 14, -994),     -- Basecamp (opsional)
 }
 local DEFAULT_DELAY = 2 -- detik
-local TOGGLE_KEY = "L"  -- toggle UI & loop keybind di bawah
+local TOGGLE_KEY = "L"  -- toggle UI loop
 
 -----------------------------
 -- SERVICES & VAR
 -----------------------------
 local Players = game:GetService("Players")
 local UIS     = game:GetService("UserInputService")
+local RS      = game:GetService("RunService")
 local player  = Players.LocalPlayer
 
 local currentDelay = DEFAULT_DELAY
@@ -33,51 +34,48 @@ local loopThread   = nil
 -----------------------------
 -- CORE TELEPORT
 -----------------------------
-local function getHRP()
-    local char = player.Character or player.CharacterAdded:Wait()
-    return char:WaitForChild("HumanoidRootPart")
+local function getCharHum()
+	local char = player.Character or player.CharacterAdded:Wait()
+	return char, char:WaitForChild("Humanoid"), char:WaitForChild("HumanoidRootPart")
 end
 
 local function teleportTo(i)
-    if i < 1 or i > #POINTS then return end
-    local hrp = getHRP()
-    if not hrp then return end
-    hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
+	if i < 1 or i > #POINTS then return end
+	local _, _, hrp = getCharHum()
+	hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
 end
 
 local function clampDelay(x)
-    if type(x) ~= "number" or x <= 0 then return DEFAULT_DELAY end
-    if x < 0.1 then x = 0.1 end
-    if x > 30 then x = 30 end
-    return x
+	if type(x) ~= "number" or x <= 0 then return DEFAULT_DELAY end
+	if x < 0.1 then x = 0.1 end
+	if x > 30 then x = 30 end
+	return x
 end
 
 local function startLoop()
-    if autoLoop then return end
-    autoLoop = true
-    loopThread = coroutine.create(function()
-        while autoLoop do
-            for i = 1, #POINTS do
-                if not autoLoop then break end
-                teleportTo(i)
-                task.wait(currentDelay)
-            end
-        end
-    end)
-    coroutine.resume(loopThread)
+	if autoLoop then return end
+	autoLoop = true
+	loopThread = coroutine.create(function()
+		while autoLoop do
+			for i = 1, #POINTS do
+				if not autoLoop then break end
+				teleportTo(i)
+				task.wait(currentDelay)
+			end
+		end
+	end)
+	coroutine.resume(loopThread)
 end
 
 local function stopLoop()
-    autoLoop = false
+	autoLoop = false
 end
 
 -----------------------------
 -- RAYFIELD UI
 -----------------------------
--- Load library (sesuai docs)
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Buat jendela
 local Window = Rayfield:CreateWindow({
     Name = "WS",
     Icon = 0,
@@ -85,90 +83,195 @@ local Window = Rayfield:CreateWindow({
     LoadingSubtitle = "Teleporter",
     ShowText = "Teleporter",
     Theme = "Default",
-    ToggleUIKeybind = "K", -- toggle visibilitas UI Rayfield
+    ToggleUIKeybind = "K",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "Teleporter7",
         FileName = "Config"
     },
-    KeySystem = false, -- kita pakai key manual/serverside di versi sebelumnya; matikan di Rayfield
+    KeySystem = false,
 })
 
--- Tab utama
+-- ===== Tab: Main Fiture (baru) =====
+local TabMain = Window:CreateTab("Main Fiture", "layout-grid")
+
+-- ==== Fly ====
+local flyEnabled = false
+local flySpeed   = 60
+local ascendHeld, descendHeld = false, false
+local flyConn -- RenderStepped connection
+
+local function setFly(state)
+	local char, hum, hrp = getCharHum()
+	if state then
+		if flyEnabled then return end
+		flyEnabled = true
+		hum.PlatformStand = false
+		hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+
+		flyConn = RS.RenderStepped:Connect(function()
+			if not flyEnabled then return end
+			if not char or not char.Parent then return end
+			local move = hum.MoveDirection -- arah input WASD/thumbstick
+			local up = (ascendHeld and 1 or 0) - (descendHeld and 1 or 0)
+			-- gunakan kamera untuk arah horizontal
+			local camLook = workspace.CurrentCamera.CFrame.LookVector
+			local flatMove = Vector3.new(move.X, 0, move.Z).Unit
+			if flatMove.Magnitude ~= flatMove.Magnitude then -- NaN guard
+				flatMove = Vector3.zero
+			end
+			local vel = flatMove * flySpeed
+			vel = Vector3.new(vel.X, up * flySpeed, vel.Z)
+			hrp.AssemblyLinearVelocity = vel
+		end)
+	else
+		if not flyEnabled then return end
+		flyEnabled = false
+		if flyConn then flyConn:Disconnect() flyConn = nil end
+		if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
+	end
+end
+
+-- keybind naik/turun (E/Q)
+UIS.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.KeyCode == Enum.KeyCode.E then ascendHeld = true end
+	if input.KeyCode == Enum.KeyCode.Q then descendHeld = true end
+end)
+UIS.InputEnded:Connect(function(input, gpe)
+	if input.KeyCode == Enum.KeyCode.E then ascendHeld = false end
+	if input.KeyCode == Enum.KeyCode.Q then descendHeld = false end
+end)
+
+TabMain:CreateSection("Fly")
+TabMain:CreateToggle({
+	Name = "Aktifkan Fly (E naik, Q turun)",
+	CurrentValue = false,
+	Flag = "FlyToggle",
+	Callback = function(on) setFly(on) end,
+})
+TabMain:CreateSlider({
+	Name = "Kecepatan Fly",
+	Range = {10, 200},
+	Increment = 1,
+	Suffix = "",
+	CurrentValue = flySpeed,
+	Flag = "FlySpeed",
+	Callback = function(val) flySpeed = math.clamp(tonumber(val) or flySpeed, 10, 200) end,
+})
+
+-- ==== NoClip ====
+local noclip = false
+local noclipConn
+local function setNoClip(state)
+	local char = player.Character
+	if state then
+		if noclip then return end
+		noclip = true
+		noclipConn = RS.Stepped:Connect(function()
+			char = player.Character
+			if not char then return end
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CanCollide = false
+				end
+			end
+		end)
+	else
+		if not noclip then return end
+		noclip = false
+		if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+		-- biarkan Roblox yang restore collision saat respawn
+	end
+end
+
+TabMain:CreateSection("No Clip")
+TabMain:CreateToggle({
+	Name = "Aktifkan No Clip",
+	CurrentValue = false,
+	Flag = "NoClipToggle",
+	Callback = function(on) setNoClip(on) end,
+})
+
+-- ==== Speed Run (WalkSpeed) ====
+local defaultWalkSpeed = 16
+local speedConn
+local function setRunSpeed(v)
+	local _, hum = getCharHum()
+	hum.WalkSpeed = math.clamp(v, 1, 200)
+end
+
+TabMain:CreateSection("Speed Run")
+TabMain:CreateSlider({
+	Name = "WalkSpeed",
+	Range = {16, 200},
+	Increment = 1,
+	Suffix = "",
+	CurrentValue = defaultWalkSpeed,
+	Flag = "RunSpeed",
+	Callback = function(val) setRunSpeed(tonumber(val) or defaultWalkSpeed) end,
+})
+TabMain:CreateButton({
+	Name = "Reset WalkSpeed (16)",
+	Callback = function() setRunSpeed(16) end,
+})
+
+-- ===== Tab: Teleporter (seperti sebelumnya) =====
 local Tab = Window:CreateTab("Teleporter", "map-pin")
 
--- Bagian Manual
 Tab:CreateSection("Manual Teleport")
-
 for i = 1, #POINTS do
-    Tab:CreateButton({
-        Name = ("TP %d"):format(i),
-        Callback = function()
-            teleportTo(i)
-        end,
-    })
+	Tab:CreateButton({
+		Name = ("TP %d"):format(i),
+		Callback = function() teleportTo(i) end,
+	})
 end
 
--- Bagian Auto Loop
 Tab:CreateSection("Auto Loop")
-
--- Toggle Auto Loop
 local ToggleLoop = Tab:CreateToggle({
-    Name = "Aktifkan Auto Loop",
-    CurrentValue = false,
-    Flag = "AutoLoop",
-    Callback = function(on)
-        if on then startLoop() else stopLoop() end
-    end,
+	Name = "Aktifkan Auto Loop",
+	CurrentValue = false,
+	Flag = "AutoLoop",
+	Callback = function(on) if on then startLoop() else stopLoop() end end,
+})
+Tab:CreateSlider({
+	Name = "Delay Teleport (detik)",
+	Range = {0.1, 30},
+	Increment = 0.1,
+	Suffix = "s",
+	CurrentValue = DEFAULT_DELAY,
+	Flag = "DelayTP",
+	Callback = function(val) currentDelay = clampDelay(val) end,
 })
 
--- Slider Delay (0.1s - 30s)
-local DelaySlider = Tab:CreateSlider({
-    Name = "Delay Teleport (detik)",
-    Range = {0.1, 30},
-    Increment = 0.1,
-    Suffix = "s",
-    CurrentValue = DEFAULT_DELAY,
-    Flag = "DelayTP",
-    Callback = function(val)
-        currentDelay = clampDelay(val)
-    end,
-})
-
--- Notifikasi siap
 Rayfield:Notify({
-    Title = "Teleporter siap",
-    Content = "Selamat menggunakan script",
-    Duration = 3,
-    Image = "Fire"
+	Title = "Teleporter siap",
+	Content = "Selamat menggunakan script",
+	Duration = 3,
+	Image = "Fire"
 })
 
--- Binds (angka 1..7 untuk TP, L untuk toggle loop)
 Tab:CreateSection("Keybinds")
-
 for i = 1, #POINTS do
-    Tab:CreateKeybind({
-        Name = ("Keybind TP %d"):format(i),
-        CurrentKeybind = tostring(i), -- "1".."7"
-        HoldToInteract = false,
-        Flag = ("BindTP%d"):format(i),
-        Callback = function()
-            teleportTo(i)
-        end,
-    })
+	Tab:CreateKeybind({
+		Name = ("Keybind TP %d"):format(i),
+		CurrentKeybind = tostring(i),
+		HoldToInteract = false,
+		Flag = ("BindTP%d"):format(i),
+		Callback = function() teleportTo(i) end,
+	})
 end
-
 Tab:CreateKeybind({
-    Name = "Toggle Auto Loop",
-    CurrentKeybind = TOGGLE_KEY,
-    HoldToInteract = false,
-    Flag = "BindLoop",
-    Callback = function()
-        local newState = not autoLoop
-        ToggleLoop:Set(newState)
-        if newState then startLoop() else stopLoop() end
-    end,
+	Name = "Toggle Auto Loop",
+	CurrentKeybind = TOGGLE_KEY,
+	HoldToInteract = false,
+	Flag = "BindLoop",
+	Callback = function()
+		local newState = not autoLoop
+		ToggleLoop:Set(newState)
+		if newState then startLoop() else stopLoop() end
+	end,
 })
 
--- (opsional) load & simpan konfigurasi Rayfield
-Rayfield:LoadConfiguration() -- sesuai petunjuk config saving
+Rayfield:LoadConfiguration()
