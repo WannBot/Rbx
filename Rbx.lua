@@ -311,25 +311,65 @@ TabLogin:CreateButton({
             })
             return
         end
-        if typedKey == ALLOWED_KEY then
-            isLoggedIn = true
-            Rayfield:Notify({
-                Title = "Login Berhasil",
-                Content = "Selamat datang!",
-                Duration = 3,
-                Image = "check"
-            })
-            -- Buat tab fitur utama setelah login berhasil
-            buildFeatureTabs()
-            -- Hapus Tab Login dari menu
-            Rayfield:DestroyTab(TabLogin)
-        else
+
+        if typedKey ~= ALLOWED_KEY then
             Rayfield:Notify({
                 Title = "Login Gagal",
                 Content = "KEY salah, coba lagi!",
                 Duration = 3,
                 Image = "x"
             })
+            return
         end
+
+        -- 1) Login OK: build tabs fitur
+        isLoggedIn = true
+        buildFeatureTabs()
+
+        -- 2) Hapus Tab "Login" dari UI Rayfield (tanpa method khusus)
+        local pg = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+        if pg then
+            -- cari ScreenGui Rayfield (nama bisa bervariasi, jadi kita scan)
+            local rayfieldGui
+            for _,gui in ipairs(pg:GetChildren()) do
+                if gui:IsA("ScreenGui") and tostring(gui.Name):lower():find("rayfield") then
+                    rayfieldGui = gui
+                    break
+                end
+            end
+            if rayfieldGui then
+                -- hapus page & tombol tab yang berlabel "Login"
+                -- Strategi: cari Frame/Button/Label yang Text/Name-nya "Login"
+                for _,inst in ipairs(rayfieldGui:GetDescendants()) do
+                    local ok,isMatch = pcall(function()
+                        if inst:IsA("TextButton") or inst:IsA("TextLabel") then
+                            return (tostring(inst.Text):lower() == "login")
+                        end
+                        -- beberapa fork menamai container tab langsung "Login"
+                        return (tostring(inst.Name):lower() == "login")
+                    end)
+                    if ok and isMatch then
+                        local top = inst
+                        -- naik sedikit ke parent container tab sebelum di-Destroy
+                        for _=1,3 do
+                            if top and top.Parent then top = top.Parent end
+                        end
+                        if top and top.Parent then
+                            top:Destroy()
+                        else
+                            inst:Destroy()
+                        end
+                    end
+                end
+            end
+        end
+
+        -- 3) Pindahkan fokus ke tab baru (opsional: cari tab pertama yang bukan login)
+        Rayfield:Notify({
+            Title = "Login Berhasil",
+            Content = "Selamat datang!",
+            Duration = 3,
+            Image = "check"
+        })
     end,
 })
