@@ -1,4 +1,4 @@
--- // Teleporter 7 Pos + Rayfield UI + Main Fiture (Fly Camera-Based, NoClip, Speed, Invisible)
+-- // Teleporter 7 Pos + Rayfield UI + Main Fiture (Fly, NoClip, Speed) + Login Key Manual
 -- // Gunakan di game sendiri / testing. Jangan dipakai untuk eksploit di game orang lain.
 
 -----------------------------
@@ -92,198 +92,252 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false,
 })
 
--- ===== Tab: Main Fiture =====
-local TabMain = Window:CreateTab("Main Fiture", "layout-grid")
+-------------------------------------------------
+-- LOGIN: Key Manual sederhana (wajib saat mulai)
+-------------------------------------------------
+local ALLOWED_KEY = "ws123"  -- GANTI dengan KEY kamu
+local isLoggedIn  = false
 
--- ==== Fly (Camera-Based) ====
--- Joystick/WASD mengikuti arah kamera (maju kamera = terbang ke depan/atas jika kamera menengadah)
-local flyEnabled = false
-local flySpeed   = 60
-local flyConn -- RenderStepped connection
+-- Fungsi yang membangun tab fitur utama (dipanggil setelah login sukses)
+local function buildFeatureTabs()
+    -- ===== Tab: Main Fiture =====
+    local TabMain = Window:CreateTab("Main Fiture", "layout-grid")
 
-local function setFly(state)
-	local char, hum, hrp = getCharHum()
-	if state then
-		if flyEnabled then return end
-		flyEnabled = true
-		hum.PlatformStand = false
-		hum:ChangeState(Enum.HumanoidStateType.Physics)
+    -- ==== Fly (E/Q naik-turun sesuai script kamu sekarang) ====
+    local flyEnabled = false
+    local flySpeed   = 60
+    local ascendHeld, descendHeld = false, false
+    local flyConn -- RenderStepped connection
 
-		flyConn = RS.RenderStepped:Connect(function()
-			if not flyEnabled then return end
-			char, hum, hrp = getCharHum()
-			local cam = workspace.CurrentCamera
-			if not cam then return end
+    local function setFly(state)
+        local char, hum, hrp = getCharHum()
+        if state then
+            if flyEnabled then return end
+            flyEnabled = true
+            hum.PlatformStand = false
+            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 
-			-- Input dari WASD/joystick bawaan
-			local move  = hum.MoveDirection
-			-- Arah kamera (ikut pitch untuk naik/turun)
-			local look  = cam.CFrame.LookVector
-			local right = cam.CFrame.RightVector
+            flyConn = RS.RenderStepped:Connect(function()
+                if not flyEnabled then return end
+                if not char or not char.Parent then return end
+                local move = hum.MoveDirection -- arah input WASD/thumbstick
+                local up = (ascendHeld and 1 or 0) - (descendHeld and 1 or 0)
+                -- gunakan kamera untuk arah horizontal (versi datar)
+                local camLook = workspace.CurrentCamera.CFrame.LookVector
+                local flatMove = Vector3.new(move.X, 0, move.Z).Unit
+                if flatMove.Magnitude ~= flatMove.Magnitude then -- NaN guard
+                    flatMove = Vector3.zero
+                end
+                local vel = flatMove * flySpeed
+                vel = Vector3.new(vel.X, up * flySpeed, vel.Z)
+                hrp.AssemblyLinearVelocity = vel
+            end)
+        else
+            if not flyEnabled then return end
+            flyEnabled = false
+            if flyConn then flyConn:Disconnect() flyConn = nil end
+            if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
+        end
+    end
 
-			-- Kombinasi X/Z input terhadap orientasi kamera (mengandung komponen Y dari look)
-			local vel = (look * move.Z + right * move.X) * flySpeed
+    -- keybind naik/turun (E/Q)
+    UIS.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
+        if input.KeyCode == Enum.KeyCode.E then ascendHeld = true end
+        if input.KeyCode == Enum.KeyCode.Q then descendHeld = true end
+    end)
+    UIS.InputEnded:Connect(function(input, gpe)
+        if input.KeyCode == Enum.KeyCode.E then ascendHeld = false end
+        if input.KeyCode == Enum.KeyCode.Q then descendHeld = false end
+    end)
 
-			hrp.AssemblyLinearVelocity = vel
-			hrp.AssemblyAngularVelocity = Vector3.zero
-		end)
-	else
-		if not flyEnabled then return end
-		flyEnabled = false
-		if flyConn then flyConn:Disconnect() flyConn = nil end
-		if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
-	end
+    TabMain:CreateSection("Fly")
+    TabMain:CreateToggle({
+        Name = "Aktifkan Fly (E naik, Q turun)",
+        CurrentValue = false,
+        Flag = "FlyToggle",
+        Callback = function(on) setFly(on) end,
+    })
+    TabMain:CreateSlider({
+        Name = "Kecepatan Fly",
+        Range = {10, 200},
+        Increment = 1,
+        Suffix = "",
+        CurrentValue = flySpeed,
+        Flag = "FlySpeed",
+        Callback = function(val) flySpeed = math.clamp(tonumber(val) or flySpeed, 10, 200) end,
+    })
+
+    -- ==== NoClip ====
+    local noclip = false
+    local noclipConn
+    local function setNoClip(state)
+        local char = player.Character
+        if state then
+            if noclip then return end
+            noclip = true
+            noclipConn = RS.Stepped:Connect(function()
+                char = player.Character
+                if not char then return end
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end)
+        else
+            if not noclip then return end
+            noclip = false
+            if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+            -- biarkan Roblox yang restore collision saat respawn
+        end
+    end
+
+    TabMain:CreateSection("No Clip")
+    TabMain:CreateToggle({
+        Name = "Aktifkan No Clip",
+        CurrentValue = false,
+        Flag = "NoClipToggle",
+        Callback = function(on) setNoClip(on) end,
+    })
+
+    -- ==== Speed Run (WalkSpeed) ====
+    local defaultWalkSpeed = 16
+    local function setRunSpeed(v)
+        local _, hum = getCharHum()
+        hum.WalkSpeed = math.clamp(v, 1, 200)
+    end
+
+    TabMain:CreateSection("Speed Run")
+    TabMain:CreateSlider({
+        Name = "WalkSpeed",
+        Range = {16, 200},
+        Increment = 1,
+        Suffix = "",
+        CurrentValue = defaultWalkSpeed,
+        Flag = "RunSpeed",
+        Callback = function(val) setRunSpeed(tonumber(val) or defaultWalkSpeed) end,
+    })
+    TabMain:CreateButton({
+        Name = "Reset WalkSpeed (16)",
+        Callback = function() setRunSpeed(16) end,
+    })
+
+    -- ===== Tab: Teleporter (seperti sebelumnya) =====
+    local Tab = Window:CreateTab("Teleporter", "map-pin")
+
+    Tab:CreateSection("Manual Teleport")
+    for i = 1, #POINTS do
+        Tab:CreateButton({
+            Name = ("TP %d"):format(i),
+            Callback = function() teleportTo(i) end,
+        })
+    end
+
+    Tab:CreateSection("Auto Loop")
+    local ToggleLoop = Tab:CreateToggle({
+        Name = "Aktifkan Auto Loop",
+        CurrentValue = false,
+        Flag = "AutoLoop",
+        Callback = function(on) if on then startLoop() else stopLoop() end end,
+    })
+    Tab:CreateSlider({
+        Name = "Delay Teleport (detik)",
+        Range = {0.1, 30},
+        Increment = 0.1,
+        Suffix = "s",
+        CurrentValue = DEFAULT_DELAY,
+        Flag = "DelayTP",
+        Callback = function(val) currentDelay = clampDelay(val) end,
+    })
+
+    Rayfield:Notify({
+        Title = "Teleporter siap",
+        Content = "Selamat menggunakan script",
+        Duration = 3,
+        Image = "Fire"
+    })
+
+    Tab:CreateSection("Keybinds")
+    for i = 1, #POINTS do
+        Tab:CreateKeybind({
+            Name = ("Keybind TP %d"):format(i),
+            CurrentKeybind = tostring(i),
+            HoldToInteract = false,
+            Flag = ("BindTP%d"):format(i),
+            Callback = function() teleportTo(i) end,
+        })
+    end
+    Tab:CreateKeybind({
+        Name = "Toggle Auto Loop",
+        CurrentKeybind = TOGGLE_KEY,
+        HoldToInteract = false,
+        Flag = "BindLoop",
+        Callback = function()
+            local newState = not autoLoop
+            ToggleLoop:Set(newState)
+            if newState then startLoop() else stopLoop() end
+        end,
+    })
+
+    Rayfield:LoadConfiguration()
 end
 
-TabMain:CreateSection("Fly (Camera-Based)")
-TabMain:CreateToggle({
-	Name = "Aktifkan Fly (ikut arah kamera)",
-	CurrentValue = false,
-	Flag = "FlyToggle",
-	Callback = function(on) setFly(on) end,
-})
-TabMain:CreateSlider({
-	Name = "Kecepatan Fly",
-	Range = {10, 200},
-	Increment = 1,
-	Suffix = "",
-	CurrentValue = flySpeed,
-	Flag = "FlySpeed",
-	Callback = function(val) flySpeed = math.clamp(tonumber(val) or flySpeed, 10, 200) end,
+-- ===== Tab: Login (dibuat lebih dulu, tab lain baru dibuat setelah login) =====
+local TabLogin = Window:CreateTab("Login", "lock")
+
+TabLogin:CreateSection("Masukkan KEY untuk melanjutkan")
+
+local typedKey = ""
+local InputKey = TabLogin:CreateInput({
+    Name = "Key",
+    PlaceholderText = "Masukkan KEY di sini",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(text)
+        typedKey = tostring(text or "")
+    end,
 })
 
--- ==== NoClip ====
-local noclip = false
-local noclipConn
-local function setNoClip(state)
-	local char = player.Character
-	if state then
-		if noclip then return end
-		noclip = true
-		noclipConn = RS.Stepped:Connect(function()
-			char = player.Character
-			if not char then return end
-			for _, part in ipairs(char:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.CanCollide = false
-				end
-			end
-		end)
-	else
-		if not noclip then return end
-		noclip = false
-		if noclipConn then noclipConn:Disconnect() noclipConn = nil end
-		-- biarkan Roblox yang restore collision saat respawn
-	end
-end
-
-TabMain:CreateSection("No Clip")
-TabMain:CreateToggle({
-	Name = "Aktifkan No Clip",
-	CurrentValue = false,
-	Flag = "NoClipToggle",
-	Callback = function(on) setNoClip(on) end,
+TabLogin:CreateButton({
+    Name = "Login",
+    Callback = function()
+        if typedKey == "" then
+            Rayfield:Notify({
+                Title = "Login Gagal",
+                Content = "KEY masih kosong.",
+                Duration = 3,
+                Image = "alert-triangle"
+            })
+            return
+        end
+        if typedKey == ALLOWED_KEY then
+            isLoggedIn = true
+            Rayfield:Notify({
+                Title = "Login Berhasil",
+                Content = "Selamat datang!",
+                Duration = 3,
+                Image = "check"
+            })
+            -- Buat tab fitur utama setelah login berhasil
+            buildFeatureTabs()
+            -- (opsional) Sembunyikan tab Login:
+            if TabLogin and TabLogin.Page then
+                TabLogin.Page.Visible = false
+            end
+        else
+            Rayfield:Notify({
+                Title = "Login Gagal",
+                Content = "KEY salah, coba lagi!",
+                Duration = 3,
+                Image = "x"
+            })
+        end
+    end,
 })
 
--- ==== Speed Run (WalkSpeed) ====
-local defaultWalkSpeed = 16
-local function setRunSpeed(v)
-	local _, hum = getCharHum()
-	hum.WalkSpeed = math.clamp(v, 1, 200)
-end
-
-TabMain:CreateSection("Speed Run")
-TabMain:CreateSlider({
-	Name = "WalkSpeed",
-	Range = {16, 200},
-	Increment = 1,
-	Suffix = "",
-	CurrentValue = defaultWalkSpeed,
-	Flag = "RunSpeed",
-	Callback = function(val) setRunSpeed(tonumber(val) or defaultWalkSpeed) end,
+-- (Opsional) Info cara ganti KEY
+TabLogin:CreateParagraph({
+    Title = "Info",
+    Content = "Ganti nilai ALLOWED_KEY di script untuk mengubah KEY login."
 })
-TabMain:CreateButton({
-	Name = "Reset WalkSpeed (16)",
-	Callback = function() setRunSpeed(16) end,
-})
-
--- ==== Invisible (Local) ====
--- Membuat karakter tak terlihat di client-mu (pemain lain masih bisa melihat).
-local function setInvisibleLocal(state)
-	local char = player.Character
-	if not char then return end
-	for _, obj in ipairs(char:GetDescendants()) do
-		if obj:IsA("BasePart") then
-			obj.LocalTransparencyModifier = state and 1 or 0
-		elseif obj:IsA("Decal") then
-			obj.Transparency = state and 1 or 0
-		end
-	end
-end
-
-TabMain:CreateSection("Invisible (Local)")
-TabMain:CreateToggle({
-	Name = "Jadikan diri tak terlihat (local)",
-	CurrentValue = false,
-	Flag = "InvisibleLocal",
-	Callback = function(on) setInvisibleLocal(on) end,
-})
-
--- ===== Tab: Teleporter (seperti sebelumnya) =====
-local Tab = Window:CreateTab("Teleporter", "map-pin")
-
-Tab:CreateSection("Manual Teleport")
-for i = 1, #POINTS do
-	Tab:CreateButton({
-		Name = ("TP %d"):format(i),
-		Callback = function() teleportTo(i) end,
-	})
-end
-
-Tab:CreateSection("Auto Loop")
-local ToggleLoop = Tab:CreateToggle({
-	Name = "Aktifkan Auto Loop",
-	CurrentValue = false,
-	Flag = "AutoLoop",
-	Callback = function(on) if on then startLoop() else stopLoop() end end,
-})
-Tab:CreateSlider({
-	Name = "Delay Teleport (detik)",
-	Range = {0.1, 30},
-	Increment = 0.1,
-	Suffix = "s",
-	CurrentValue = DEFAULT_DELAY,
-	Flag = "DelayTP",
-	Callback = function(val) currentDelay = clampDelay(val) end,
-})
-
-Rayfield:Notify({
-	Title = "Teleporter siap",
-	Content = "Selamat menggunakan script",
-	Duration = 3,
-	Image = "Fire"
-})
-
-Tab:CreateSection("Keybinds")
-for i = 1, #POINTS do
-	Tab:CreateKeybind({
-		Name = ("Keybind TP %d"):format(i),
-		CurrentKeybind = tostring(i),
-		HoldToInteract = false,
-		Flag = ("BindTP%d"):format(i),
-		Callback = function() teleportTo(i) end,
-	})
-end
-Tab:CreateKeybind({
-	Name = "Toggle Auto Loop",
-	CurrentKeybind = TOGGLE_KEY,
-	HoldToInteract = false,
-	Flag = "BindLoop",
-	Callback = function()
-		local newState = not autoLoop
-		ToggleLoop:Set(newState)
-		if newState then startLoop() else stopLoop() end
-	end,
-})
-
-Rayfield:LoadConfiguration()
