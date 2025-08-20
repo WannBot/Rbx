@@ -1,4 +1,4 @@
--- // Teleporter 7 Pos + Rayfield UI + Main Fiture (Fly, NoClip, Speed) + Login Key Manual
+-- // Teleporter 7 Pos + Rayfield UI + Login Key Manual (hapus Fly)
 -- // Gunakan di game sendiri / testing. Jangan dipakai untuk eksploit di game orang lain.
 
 -----------------------------
@@ -35,139 +35,68 @@ local loopThread   = nil
 -- CORE TELEPORT
 -----------------------------
 local function getCharHum()
-	local char = player.Character or player.CharacterAdded:Wait()
-	return char, char:WaitForChild("Humanoid"), char:WaitForChild("HumanoidRootPart")
+    local char = player.Character or player.CharacterAdded:Wait()
+    return char, char:WaitForChild("Humanoid"), char:WaitForChild("HumanoidRootPart")
 end
 
 local function teleportTo(i)
-	if i < 1 or i > #POINTS then return end
-	local _, _, hrp = getCharHum()
-	hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
+    if i < 1 or i > #POINTS then return end
+    local _, _, hrp = getCharHum()
+    hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
 end
 
 local function clampDelay(x)
-	if type(x) ~= "number" or x <= 0 then return DEFAULT_DELAY end
-	if x < 0.1 then x = 0.1 end
-	if x > 30 then x = 30 end
-	return x
+    if type(x) ~= "number" or x <= 0 then return DEFAULT_DELAY end
+    if x < 0.1 then x = 0.1 end
+    if x > 30 then x = 30 end
+    return x
 end
 
 local function startLoop()
-	if autoLoop then return end
-	autoLoop = true
-	loopThread = coroutine.create(function()
-		while autoLoop do
-			for i = 1, #POINTS do
-				if not autoLoop then break end
-				teleportTo(i)
-				task.wait(currentDelay)
-			end
-		end
-	end)
-	coroutine.resume(loopThread)
+    if autoLoop then return end
+    autoLoop = true
+    loopThread = coroutine.create(function()
+        while autoLoop do
+            for i = 1, #POINTS do
+                if not autoLoop then break end
+                teleportTo(i)
+                task.wait(currentDelay)
+            end
+        end
+    end)
+    coroutine.resume(loopThread)
 end
 
 local function stopLoop()
-	autoLoop = false
+    autoLoop = false
 end
 
 -----------------------------
--- RAYFIELD UI
+-- RAYFIELD HELPERS
 -----------------------------
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local function newWindow()
+    local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+    local Window = Rayfield:CreateWindow({
+        Name = "WS",
+        Icon = 0,
+        LoadingTitle = "Rayfield Interface Suite",
+        LoadingSubtitle = "UI",
+        Theme = "Default",
+        ToggleUIKeybind = "K",
+        ConfigurationSaving = {
+            Enabled = true,
+            FolderName = "Teleporter7",
+            FileName = "Config"
+        },
+        KeySystem = false,
+    })
+    return Rayfield, Window
+end
 
-local Window = Rayfield:CreateWindow({
-    Name = "WS",
-    Icon = 0,
-    LoadingTitle = "Rayfield Interface Suite",
-    LoadingSubtitle = "Teleporter",
-    ShowText = "Teleporter",
-    Theme = "Default",
-    ToggleUIKeybind = "K",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "Teleporter7",
-        FileName = "Config"
-    },
-    KeySystem = false,
-})
-
--------------------------------------------------
--- LOGIN: Key Manual sederhana (wajib saat mulai)
--------------------------------------------------
-local ALLOWED_KEY = "ws123"  -- GANTI dengan KEY kamu
-local isLoggedIn  = false
-
--- Fungsi yang membangun tab fitur utama (dipanggil setelah login sukses)
-local function buildFeatureTabs()
-    -- ===== Tab: Main Fiture =====
+-- Bangun tab fitur utama (TANPA Fly)
+local function buildFeatureTabs(Window, Rayfield)
+    -- ===== Tab: Main Fiture (No Clip + Speed) =====
     local TabMain = Window:CreateTab("Main Fiture", "layout-grid")
-
-    -- ==== Fly (E/Q naik-turun sesuai script kamu sekarang) ====
-    local flyEnabled = false
-    local flySpeed   = 60
-    local ascendHeld, descendHeld = false, false
-    local flyConn -- RenderStepped connection
-
-    local function setFly(state)
-        local char, hum, hrp = getCharHum()
-        if state then
-            if flyEnabled then return end
-            flyEnabled = true
-            hum.PlatformStand = false
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-
-            flyConn = RS.RenderStepped:Connect(function()
-                if not flyEnabled then return end
-                if not char or not char.Parent then return end
-                local move = hum.MoveDirection -- arah input WASD/thumbstick
-                local up = (ascendHeld and 1 or 0) - (descendHeld and 1 or 0)
-                -- gunakan kamera untuk arah horizontal (versi datar)
-                local camLook = workspace.CurrentCamera.CFrame.LookVector
-                local flatMove = Vector3.new(move.X, 0, move.Z).Unit
-                if flatMove.Magnitude ~= flatMove.Magnitude then -- NaN guard
-                    flatMove = Vector3.zero
-                end
-                local vel = flatMove * flySpeed
-                vel = Vector3.new(vel.X, up * flySpeed, vel.Z)
-                hrp.AssemblyLinearVelocity = vel
-            end)
-        else
-            if not flyEnabled then return end
-            flyEnabled = false
-            if flyConn then flyConn:Disconnect() flyConn = nil end
-            if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
-        end
-    end
-
-    -- keybind naik/turun (E/Q)
-    UIS.InputBegan:Connect(function(input, gpe)
-        if gpe then return end
-        if input.KeyCode == Enum.KeyCode.E then ascendHeld = true end
-        if input.KeyCode == Enum.KeyCode.Q then descendHeld = true end
-    end)
-    UIS.InputEnded:Connect(function(input, gpe)
-        if input.KeyCode == Enum.KeyCode.E then ascendHeld = false end
-        if input.KeyCode == Enum.KeyCode.Q then descendHeld = false end
-    end)
-
-    TabMain:CreateSection("Fly")
-    TabMain:CreateToggle({
-        Name = "Aktifkan Fly (E naik, Q turun)",
-        CurrentValue = false,
-        Flag = "FlyToggle",
-        Callback = function(on) setFly(on) end,
-    })
-    TabMain:CreateSlider({
-        Name = "Kecepatan Fly",
-        Range = {10, 200},
-        Increment = 1,
-        Suffix = "",
-        CurrentValue = flySpeed,
-        Flag = "FlySpeed",
-        Callback = function(val) flySpeed = math.clamp(tonumber(val) or flySpeed, 10, 200) end,
-    })
 
     -- ==== NoClip ====
     local noclip = false
@@ -224,7 +153,7 @@ local function buildFeatureTabs()
         Callback = function() setRunSpeed(16) end,
     })
 
-    -- ===== Tab: Teleporter (seperti sebelumnya) =====
+    -- ===== Tab: Teleporter =====
     local Tab = Window:CreateTab("Teleporter", "map-pin")
 
     Tab:CreateSection("Manual Teleport")
@@ -265,7 +194,7 @@ local function buildFeatureTabs()
             Name = ("Keybind TP %d"):format(i),
             CurrentKeybind = tostring(i),
             HoldToInteract = false,
-            Flag = ("BindTP%d"):format(i),
+            Flag = ("BindTP"..i),
             Callback = function() teleportTo(i) end,
         })
     end
@@ -284,13 +213,18 @@ local function buildFeatureTabs()
     Rayfield:LoadConfiguration()
 end
 
--- ===== Tab: Login (dibuat lebih dulu, tab lain baru dibuat setelah login) =====
-local TabLogin = Window:CreateTab("Login", "lock")
+-------------------------------------------------
+-- LOGIN: Key Manual (wajib saat mulai)
+-------------------------------------------------
+local ALLOWED_KEY = "WS-12345"  -- GANTI dengan KEY kamu
 
+-- 1) Buat Window pertama: HANYA Tab Login
+local Rayfield, Window = newWindow()
+local TabLogin = Window:CreateTab("Login", "lock")
 TabLogin:CreateSection("Masukkan KEY untuk melanjutkan")
 
 local typedKey = ""
-local InputKey = TabLogin:CreateInput({
+TabLogin:CreateInput({
     Name = "Key",
     PlaceholderText = "Masukkan KEY di sini",
     RemoveTextAfterFocusLost = false,
@@ -311,37 +245,34 @@ TabLogin:CreateButton({
             })
             return
         end
-
-        if typedKey == ALLOWED_KEY then
-            isLoggedIn = true
-            Rayfield:Notify({
-                Title = "Login Berhasil",
-                Content = "Selamat datang!",
-                Duration = 3,
-                Image = "check"
-            })
-
-            -- Buat tab fitur utama
-            buildFeatureTabs()
-
-            -- Hapus isi Tab Login biar “hilang”
-            for _,v in ipairs(TabLogin.SectionHolder:GetChildren()) do
-                v:Destroy()
-            end
-            for _,v in ipairs(TabLogin.ElementHolder:GetChildren()) do
-                v:Destroy()
-            end
-
-            -- Opsional: ubah nama tab Login jadi kosong
-            TabLogin.TabButton.Text = ""
-
-        else
+        if typedKey ~= ALLOWED_KEY then
             Rayfield:Notify({
                 Title = "Login Gagal",
                 Content = "KEY salah, coba lagi!",
                 Duration = 3,
                 Image = "x"
             })
+            return
         end
+
+        -- >>> LOGIN SUKSES <<<
+        Rayfield:Notify({ Title = "Login Berhasil", Content = "Selamat datang!", Duration = 3, Image = "check" })
+
+        -- 2) Hancurkan seluruh Rayfield UI lama (yang berisi Tab Login)
+        local pg = player:FindFirstChild("PlayerGui")
+        if pg then
+            for _, gui in ipairs(pg:GetChildren()) do
+                if gui:IsA("ScreenGui") and tostring(gui.Name):lower():find("rayfield") then
+                    gui:Destroy()
+                end
+            end
+        end
+
+        -- 3) Buat Window BARU tanpa Tab Login, lalu bangun fitur utama
+        local Rayfield2, Window2 = newWindow()
+        buildFeatureTabs(Window2, Rayfield2)
+
+        -- (opsional) notifikasi siap
+        Rayfield2:Notify({ Title = "Siap", Content = "Fitur utama telah diaktifkan.", Duration = 3, Image = "info" })
     end,
 })
