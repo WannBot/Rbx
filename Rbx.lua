@@ -26,7 +26,7 @@ local TOGGLE_KEY = "L"  -- toggle UI loop
 --  - allow = {123, 456, ...}   -> hanya userId di daftar ini
 local KEYS = {
     ["ADMIN1"] = { role = "ADMIN", allow = "any" },
-    ["VIP1"]  = { role = "VIP",   allow = {12345678, 87654321} },
+    ["VIP1"]  = { role = "VIP",   allow = {Rosto_246, 87654321} },
     ["USER1"] = { role = "USER",  allow = "any" },
 }
 
