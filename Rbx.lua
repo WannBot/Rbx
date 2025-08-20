@@ -7,13 +7,14 @@
 local OFFSET_Y = 3
 local POINTS = {
     -- GANTI koordinat sesuai map-mu:
-    Vector3.new(100, 10, 50),    -- 1
-    Vector3.new(150, 12, -30),   -- 2
-    Vector3.new(80,  9, 100),    -- 3
-    Vector3.new(-40, 15, 75),    -- 4
-    Vector3.new(0,   25, 0),     -- 5
-    Vector3.new(220, 8, -120),   -- 6
-    Vector3.new(-100, 18, 40),   -- 7
+    Vector3.new(388, 310, -185),    -- 1
+    Vector3.new(99, 412, 615),   -- 2
+    Vector3.new(10, 601, 998),    -- 3
+    Vector3.new(871, 865, 583),    -- 4
+    Vector3.new(1622, 1080, 157),     -- 5
+    Vector3.new(2969, 1528, 708),   -- 6
+    Vector3.new(1803, 1982, 2169),   -- 7
+    Vector3.new(516, 14, -994),   -- Basecamp
 }
 local DEFAULT_DELAY = 2 -- detik
 local TOGGLE_KEY = "L"  -- toggle UI & loop keybind di bawah
