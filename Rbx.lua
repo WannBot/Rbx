@@ -217,7 +217,6 @@ end
 -- LOGIN: Key Manual (wajib saat mulai)
 -------------------------------------------------
 local ALLOWED_KEY = "WS-12345"  -- GANTI dengan KEY kamu
-local ALLOWED_KEY = "Prem"
 
 -- 1) Buat Window pertama: HANYA Tab Login
 local Rayfield, Window = newWindow()
