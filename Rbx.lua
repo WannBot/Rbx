@@ -1,30 +1,32 @@
 --[[
-Combined Script (Client-only TEST) — Key Gate (duration/lifetime) + Rayfield Teleporter + Original Script
-- This is for local testing without Studio / server. Not secure for release.
-- After successful key verification, Rayfield teleporter UI is shown and the original script you provided is executed.
-]]]
+ Client-only KEY Gate (TEST ONLY) + Rayfield Teleporter 7 Pos
+ - Tanpa Studio, tanpa server. Semuanya lokal di client.
+ - Untuk uji coba game kamu sendiri. Jangan dipakai untuk rilis publik.
+]]
 
--- ==== CONFIG: LOCAL KEYS (TEST ONLY) ====
--- You can edit/append keys here.
+-- ==== KONFIGURASI KEY (TEST LOKAL) ====
+-- Kamu bisa menambah/mengedit key di sini.
+-- durationSeconds: durasi aktif dari momen aktivasi (0 = tanpa durasi)
+-- lifetimeUntil:   batas waktu absolut (Unix epoch / os.time()) (0 = tanpa lifetime)
 local KEYS = {
-    ["30s"]  = { durationSeconds = 30,  lifetimeUntil = 0 },
-    ["TEST-5MIN"] = { durationSeconds = 300, lifetimeUntil = 0 },
-    ["TEST-LIFE"] = { durationSeconds = 0,   lifetimeUntil = 2000000000 },
+    ["TEST-30S"]  = { durationSeconds = 30,  lifetimeUntil = 0 },          -- aktif 30 detik
+    ["TEST-5MIN"] = { durationSeconds = 300, lifetimeUntil = 0 },          -- aktif 5 menit
+    ["TEST-LIFE"] = { durationSeconds = 0,   lifetimeUntil = 2000000000 }, -- hanya lifetime (contoh: 2033+)
 }
 
--- ==== TELEPORT CONFIG ====
+-- ==== TELEPORT KONFIG ====
 local OFFSET_Y = 3
 local POINTS = {
-    Vector3.new(100, 10, 50),
-    Vector3.new(150, 12, -30),
-    Vector3.new(80,  9, 100),
-    Vector3.new(-40, 15, 75),
-    Vector3.new(0,   25, 0),
-    Vector3.new(220, 8, -120),
-    Vector3.new(-100, 18, 40),
+    Vector3.new(100, 10, 50),    -- 1
+    Vector3.new(150, 12, -30),   -- 2
+    Vector3.new(80,  9, 100),    -- 3
+    Vector3.new(-40, 15, 75),    -- 4
+    Vector3.new(0,   25, 0),     -- 5
+    Vector3.new(220, 8, -120),   -- 6
+    Vector3.new(-100, 18, 40),   -- 7
 }
 local DEFAULT_DELAY   = 2
-local TOGGLE_LOOP_KEY = "L"
+local TOGGLE_LOOP_KEY = "L" -- keybind untuk toggle loop
 
 -- ==== SERVICES & VAR ====
 local Players = game:GetService("Players")
@@ -34,26 +36,27 @@ local player  = Players.LocalPlayer
 local currentDelay = DEFAULT_DELAY
 local autoLoop     = false
 local loopThread   = nil
-local expiresAt    = 0   -- timestamp expiry (client-side)
+local expiresAt    = 0   -- timestamp kadaluwarsa (client-side)
 local verified     = false
 
--- ==== TIME HELPERS ====
+-- ==== HELPER WAKTU ====
 local function minNonZero(a, b)
     if a == 0 then return b end
     if b == 0 then return a end
     return math.min(a, b)
 end
 
+-- hitung kapan expired berdasarkan policy dan waktu aktivasi sekarang
 local function computeExpiry(now, policy)
     local fromDuration = 0
     if policy.durationSeconds and policy.durationSeconds > 0 then
         fromDuration = now + policy.durationSeconds
     end
     local fromLifetime = tonumber(policy.lifetimeUntil or 0)
-    return minNonZero(fromDuration, fromLifetime) -- 0 = no limit
+    return minNonZero(fromDuration, fromLifetime) -- 0 = tidak dibatasi
 end
 
--- ==== TELEPORT CORE ====
+-- ==== CORE TELEPORT ====
 local function getHRP()
     local char = player.Character or player.CharacterAdded:Wait()
     return char:WaitForChild("HumanoidRootPart")
@@ -100,7 +103,7 @@ local function stopLoop()
     autoLoop = false
 end
 
--- ==== SIMPLE KEY PROMPT UI ====
+-- ==== UI PROMPT KEY SEDERHANA ====
 local function showKeyPrompt(onSubmit)
     local gui = Instance.new("ScreenGui")
     gui.Name = "KeyGateLocal"
@@ -181,7 +184,7 @@ local function showKeyPrompt(onSubmit)
     end)
 end
 
--- Client-side verify (TEST ONLY)
+-- Validasi KEY lokal (tanpa server)
 local function verifyKeyLocal(inputKey)
     local policy = KEYS[inputKey]
     if not policy then
@@ -191,12 +194,12 @@ local function verifyKeyLocal(inputKey)
     if policy.lifetimeUntil and policy.lifetimeUntil > 0 and now >= policy.lifetimeUntil then
         return false, "KEY sudah melewati lifetime."
     end
-    expiresAt = computeExpiry(now, policy) -- may be 0 (no limit)
+    expiresAt = computeExpiry(now, policy) -- bisa 0 jika tanpa batas
     verified  = true
     return true, "OK (lokal)"
 end
 
--- ==== RAYFIELD UI AFTER VERIFIED ====
+-- ==== RAYFIELD UI SETELAH VERIFIED ====
 local function buildRayfieldUI()
     local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
     local Window = Rayfield:CreateWindow({
@@ -212,6 +215,7 @@ local function buildRayfieldUI()
 
     local Tab = Window:CreateTab("Teleporter", "map-pin")
 
+    -- Info masa aktif
     if expiresAt and expiresAt > 0 then
         local remain = math.max(0, expiresAt - os.time())
         Tab:CreateParagraph({ Title = "Masa Aktif KEY", Content = string.format("Sisa waktu: ~%d detik", remain) })
@@ -302,6 +306,7 @@ local function buildRayfieldUI()
 
     Rayfield:Notify({ Title = "Siap", Content = "KEY valid (lokal). Gunakan tombol TP/Loop/Delay.", Duration = 5, Image = "rocket" })
 
+    -- Watchdog masa aktif
     task.spawn(function()
         while verified do
             task.wait(1)
@@ -315,200 +320,18 @@ local function buildRayfieldUI()
     end)
 end
 
--- ==== RUN: prompt key -> build UI -> run original ====
+-- ==== ALUR: minta KEY lokal → bangun UI ====
 local function run()
+    -- Prompt key
     local done = false
-    local function onSubmit(key, uiCb)
-        local ok, message = verifyKeyLocal(key)
+    showKeyPrompt(function(inputKey, uiCb)
+        local ok, message = verifyKeyLocal(inputKey)
         uiCb(ok, message)
         done = ok
         if ok then
-            task.defer(buildRayfieldUI)
-            -- Execute the original script AFTER verification:
-            local original_src = [===[
--- // Teleporter 7 Pos + Rayfield UI
--- // Gunakan di game sendiri / testing. Jangan dipakai untuk eksploit di game orang lain.
-
------------------------------
--- KONFIGURASI POSISI
------------------------------
-local OFFSET_Y = 3
-local POINTS = {
-    -- GANTI koordinat sesuai map-mu:
-    Vector3.new(388, 310, -185),    -- 1
-    Vector3.new(99, 412, 615),   -- 2
-    Vector3.new(10, 601, 998),    -- 3
-    Vector3.new(871, 865, 583),    -- 4
-    Vector3.new(1622, 1080, 157),     -- 5
-    Vector3.new(2969, 1528, 708),   -- 6
-    Vector3.new(1803, 1982, 2169),   -- 7
-    Vector3.new(516, 14, -994),   -- Basecamp
-}
-local DEFAULT_DELAY = 2 -- detik
-local TOGGLE_KEY = "L"  -- toggle UI & loop keybind di bawah
-
------------------------------
--- SERVICES & VAR
------------------------------
-local Players = game:GetService("Players")
-local UIS     = game:GetService("UserInputService")
-local player  = Players.LocalPlayer
-
-local currentDelay = DEFAULT_DELAY
-local autoLoop     = false
-local loopThread   = nil
-
------------------------------
--- CORE TELEPORT
------------------------------
-local function getHRP()
-    local char = player.Character or player.CharacterAdded:Wait()
-    return char:WaitForChild("HumanoidRootPart")
-end
-
-local function teleportTo(i)
-    if i < 1 or i > #POINTS then return end
-    local hrp = getHRP()
-    if not hrp then return end
-    hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
-end
-
-local function clampDelay(x)
-    if type(x) ~= "number" or x <= 0 then return DEFAULT_DELAY end
-    if x < 0.1 then x = 0.1 end
-    if x > 30 then x = 30 end
-    return x
-end
-
-local function startLoop()
-    if autoLoop then return end
-    autoLoop = true
-    loopThread = coroutine.create(function()
-        while autoLoop do
-            for i = 1, #POINTS do
-                if not autoLoop then break end
-                teleportTo(i)
-                task.wait(currentDelay)
-            end
+            task.delay(0.1, buildRayfieldUI)
         end
     end)
-    coroutine.resume(loopThread)
-end
-
-local function stopLoop()
-    autoLoop = false
-end
-
------------------------------
--- RAYFIELD UI
------------------------------
--- Load library (sesuai docs)
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- Buat jendela
-local Window = Rayfield:CreateWindow({
-    Name = "WS",
-    Icon = 0,
-    LoadingTitle = "Rayfield Interface Suite",
-    LoadingSubtitle = "Teleporter",
-    ShowText = "Teleporter",
-    Theme = "Default",
-    ToggleUIKeybind = "K", -- toggle visibilitas UI Rayfield
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "Teleporter7",
-        FileName = "Config"
-    },
-    KeySystem = false, -- kita pakai key manual/serverside di versi sebelumnya; matikan di Rayfield
-})
-
--- Tab utama
-local Tab = Window:CreateTab("Teleporter", "map-pin")
-
--- Bagian Manual
-Tab:CreateSection("Manual Teleport")
-
-for i = 1, #POINTS do
-    Tab:CreateButton({
-        Name = ("TP %d"):format(i),
-        Callback = function()
-            teleportTo(i)
-        end,
-    })
-end
-
--- Bagian Auto Loop
-Tab:CreateSection("Auto Loop")
-
--- Toggle Auto Loop
-local ToggleLoop = Tab:CreateToggle({
-    Name = "Aktifkan Auto Loop",
-    CurrentValue = false,
-    Flag = "AutoLoop",
-    Callback = function(on)
-        if on then startLoop() else stopLoop() end
-    end,
-})
-
--- Slider Delay (0.1s - 30s)
-local DelaySlider = Tab:CreateSlider({
-    Name = "Delay Teleport (detik)",
-    Range = {0.1, 30},
-    Increment = 0.1,
-    Suffix = "s",
-    CurrentValue = DEFAULT_DELAY,
-    Flag = "DelayTP",
-    Callback = function(val)
-        currentDelay = clampDelay(val)
-    end,
-})
-
--- Notifikasi siap
-Rayfield:Notify({
-    Title = "Teleporter siap",
-    Content = "Selamat menggunakan script",
-    Duration = 3,
-    Image = "Fire"
-})
-
--- Binds (angka 1..7 untuk TP, L untuk toggle loop)
-Tab:CreateSection("Keybinds")
-
-for i = 1, #POINTS do
-    Tab:CreateKeybind({
-        Name = ("Keybind TP %d"):format(i),
-        CurrentKeybind = tostring(i), -- "1".."7"
-        HoldToInteract = false,
-        Flag = ("BindTP%d"):format(i),
-        Callback = function()
-            teleportTo(i)
-        end,
-    })
-end
-
-Tab:CreateKeybind({
-    Name = "Toggle Auto Loop",
-    CurrentKeybind = TOGGLE_KEY,
-    HoldToInteract = false,
-    Flag = "BindLoop",
-    Callback = function()
-        local newState = not autoLoop
-        ToggleLoop:Set(newState)
-        if newState then startLoop() else stopLoop() end
-    end,
-})
-
--- (opsional) load & simpan konfigurasi Rayfield
-Rayfield:LoadConfiguration() -- sesuai petunjuk config saving
-
-]===]
-            local ok2, chunk = pcall(loadstring, original_src)
-            if ok2 and type(chunk) == "function" then
-                pcall(chunk)
-            end
-        end
-    end
-    showKeyPrompt(onSubmit)
 end
 
 run()
