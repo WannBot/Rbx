@@ -7,7 +7,7 @@ Combined Script (Client-only TEST) — Key Gate (duration/lifetime) + Rayfield T
 -- ==== CONFIG: LOCAL KEYS (TEST ONLY) ====
 -- You can edit/append keys here.
 local KEYS = {
-    ["TEST-30S"]  = { durationSeconds = 30,  lifetimeUntil = 0 },
+    ["30s"]  = { durationSeconds = 30,  lifetimeUntil = 0 },
     ["TEST-5MIN"] = { durationSeconds = 300, lifetimeUntil = 0 },
     ["TEST-LIFE"] = { durationSeconds = 0,   lifetimeUntil = 2000000000 },
 }
