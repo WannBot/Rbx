@@ -79,7 +79,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- Buat jendela
 local Window = Rayfield:CreateWindow({
-    Name = "Teleporter 7 Pos",
+    Name = "WS",
     Icon = 0,
     LoadingTitle = "Rayfield Interface Suite",
     LoadingSubtitle = "Teleporter",
@@ -138,9 +138,9 @@ local DelaySlider = Tab:CreateSlider({
 -- Notifikasi siap
 Rayfield:Notify({
     Title = "Teleporter siap",
-    Content = "Gunakan tombol TP, Toggle Auto Loop, dan Slider Delay.",
-    Duration = 5,
-    Image = "rocket"
+    Content = "Selamat menggunakan script",
+    Duration = 3,
+    Image = "Fire"
 })
 
 -- Binds (angka 1..7 untuk TP, L untuk toggle loop)
