@@ -1,23 +1,17 @@
 --[[
-Client-only TEST Gate — KEY per Roblox UserId (NO duration) + Rayfield Teleporter + Original Script
-- This is for quick local testing without Studio/server. Not secure for release.
-- Verifies: KEY must match the mapping for Players.LocalPlayer.UserId.
-- After KEY valid, shows Rayfield UI (teleporter 7 points) and then runs your original script.
+Client-only TEST Gate — KEY per Roblox UserId (NO duration) + Rayfield UI (Key System tab) + Teleporter + Run Original Script
+- Local testing only (not secure). Use only on your own experience.
 ]]]
 
--- ==== CONFIG: KEY PER USERID (EDIT THIS) ====
--- Example:
--- KEYS_PER_ID[12345678] = "susu"
--- Replace with your own UserId -> KEY pairs.
-local KEYS_PER_ID = {{
-    -- [PUT_YOUR_USERID_HERE] = "SUSU",
-    -- Example test entry (remove it later):
-    [0] = "TEST-KEY", -- 0 won't match any real user; just a placeholder
-}}
+-- ==== CONFIG: KEY PER USERID ====
+local KEYS_PER_ID = {
+    -- [12345678] = "YOUR-KEY",
+    [0] = "TEST-KEY", -- placeholder
+}
 
 -- ==== TELEPORT CONFIG ====
 local OFFSET_Y = 3
-local POINTS = {{
+local POINTS = {
     Vector3.new(100, 10, 50),
     Vector3.new(150, 12, -30),
     Vector3.new(80,  9, 100),
@@ -25,7 +19,7 @@ local POINTS = {{
     Vector3.new(0,   25, 0),
     Vector3.new(220, 8, -120),
     Vector3.new(-100, 18, 40),
-}}
+}
 local DEFAULT_DELAY   = 2
 local TOGGLE_LOOP_KEY = "L"
 
@@ -38,14 +32,11 @@ local currentDelay = DEFAULT_DELAY
 local autoLoop     = false
 local loopThread   = nil
 local verified     = false
+local cachedKey    = ""
 
 local function log(...)
     pcall(function()
-        if rconsoleprint then
-            rconsoleprint("[Teleporter] "..table.concat({{...}}," ").."\n")
-        else
-            warn("[Teleporter]", ...)
-        end
+        warn("[Teleporter]", ...)
     end)
 end
 
@@ -71,8 +62,7 @@ local function clampDelay(x)
 end
 
 local function startLoop()
-    if not verified then return end
-    if autoLoop then return end
+    if not verified or autoLoop then return end
     autoLoop = true
     loopThread = coroutine.create(function()
         while autoLoop do
@@ -90,88 +80,7 @@ local function stopLoop()
     autoLoop = false
 end
 
--- ==== SIMPLE KEY PROMPT UI ====
-local function showKeyPrompt(onSubmit)
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "KeyGateLocal"
-    gui.ResetOnSpawn = false
-    gui.Parent = player:WaitForChild("PlayerGui")
-
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 360, 0, 190)
-    frame.Position = UDim2.new(0.5, -180, 0.5, -95)
-    frame.BackgroundTransparency = 0.1
-    frame.Parent = gui
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
-
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -20, 0, 30)
-    title.Position = UDim2.new(0, 10, 0, 10)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 16
-    title.Text = "Masukkan KEY"
-    title.Parent = frame
-
-    local hint = Instance.new("TextLabel")
-    hint.Size = UDim2.new(1, -20, 0, 20)
-    hint.Position = UDim2.new(0, 10, 0, 38)
-    hint.BackgroundTransparency = 1
-    hint.Font = Enum.Font.Gotham
-    hint.TextSize = 12
-    hint.TextColor3 = Color3.fromRGB(200,200,200)
-    hint.Text = "KEY per UserId (client-only, test)"
-    hint.Parent = frame
-
-    local box = Instance.new("TextBox")
-    box.Size = UDim2.new(1, -20, 0, 34)
-    box.Position = UDim2.new(0, 10, 0, 68)
-    box.ClearTextOnFocus = false
-    box.PlaceholderText = "KEY di sini"
-    box.Text = ""
-    box.TextSize = 14
-    box.Font = Enum.Font.Gotham
-    box.BackgroundTransparency = 0.05
-    box.Parent = frame
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 8)
-
-    local msg = Instance.new("TextLabel")
-    msg.Size = UDim2.new(1, -20, 0, 20)
-    msg.Position = UDim2.new(0, 10, 0, 108)
-    msg.BackgroundTransparency = 1
-    msg.Font = Enum.Font.Gotham
-    msg.TextSize = 12
-    msg.TextColor3 = Color3.fromRGB(255,120,120)
-    msg.Text = ""
-    msg.Parent = frame
-
-    local submit = Instance.new("TextButton")
-    submit.Size = UDim2.new(1, -20, 0, 34)
-    submit.Position = UDim2.new(0, 10, 0, 136)
-    submit.Text = "Verifikasi (Lokal)"
-    submit.Font = Enum.Font.GothamMedium
-    submit.TextSize = 14
-    submit.AutoButtonColor = true
-    submit.Parent = frame
-    Instance.new("UICorner", submit).CornerRadius = UDim.new(0, 8)
-
-    submit.Activated:Connect(function()
-        local key = tostring(box.Text or ""):gsub("^%s+",""):gsub("%s+$","")
-        if key == "" then
-            msg.Text = "KEY kosong."
-            return
-        end
-        onSubmit(key, function(ok, text)
-            if ok then
-                gui:Destroy()
-            else
-                msg.Text = text or "KEY salah."
-            end
-        end)
-    end)
-end
-
--- Client-side verify (TEST ONLY, per UserId)
+-- ==== VERIFY (client-only) ====
 local function verifyKeyLocal(inputKey)
     local uid = player.UserId
     local expected = KEYS_PER_ID[uid]
@@ -185,8 +94,8 @@ local function verifyKeyLocal(inputKey)
     return true, "OK"
 end
 
--- ==== RAYFIELD UI AFTER VERIFIED ====
-local function buildRayfieldUI()
+-- ==== RAYFIELD UI ====
+local function buildRayfieldUI(original_src)
     local ok, Rayfield = pcall(function()
         return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
     end)
@@ -196,39 +105,107 @@ local function buildRayfieldUI()
     end
 
     local Window = Rayfield:CreateWindow({
-        Name = "Teleporter 7 Pos",
+        Name = "HRZ TEAM - Hack (Testing)",
         Icon = 0,
         LoadingTitle = "Rayfield",
-        LoadingSubtitle = "Teleporter",
+        LoadingSubtitle = "UI",
         Theme = "Default",
         ToggleUIKeybind = "K",
         ConfigurationSaving = { Enabled = true, FolderName = "Teleporter7Local", FileName = "Config" },
         KeySystem = false,
     })
 
-    local Tab = Window:CreateTab("Teleporter", "map-pin")
+    -- Tabs seperti gambar: "Key System", "Main Fiture", "Teleport Lokasi", "Creator"
+    local TabKey   = Window:CreateTab("Key System", "key")
+    local TabMain  = Window:CreateTab("Main Fiture", "layout-grid")
+    local TabTP    = Window:CreateTab("Teleport Lokasi", "map-pin")
+    local TabAbout = Window:CreateTab("Creator", "user")
 
-    Tab:CreateSection("Manual Teleport")
+    -- ==== Key System section ====
+    TabKey:CreateSection("🔑 Key System")
+
+    -- Input (placeholder "Contoh: hrzteam")
+    local KeyInput = TabKey:CreateInput({
+        Name = "Masukkan Key",
+        PlaceholderText = "Contoh: hrzteam",
+        RemoveTextAfterFocusLost = false,
+        Callback = function(text)
+            cachedKey = tostring(text or "")
+        end,
+    })
+
+    -- Validasi Key button
+    TabKey:CreateButton({
+        Name = "Validasi Key",
+        Callback = function()
+            if cachedKey == "" then
+                Rayfield:Notify({ Title = "Gagal", Content = "Key masih kosong.", Duration = 4, Image = "alert-triangle" })
+                return
+            end
+            local ok,msg = verifyKeyLocal(cachedKey)
+            if ok then
+                Rayfield:Notify({ Title = "Sukses", Content = "Key valid. Fitur dibuka.", Duration = 4, Image = "check" })
+                -- Jalankan original script setelah valid
+                if type(original_src) == "string" and #original_src > 0 then
+                    local ok2, chunk = pcall(loadstring, original_src)
+                    if ok2 and type(chunk) == "function" then
+                        task.spawn(function()
+                            local ok3, err = pcall(chunk)
+                            if not ok3 then log("Original script error:", tostring(err)) end
+                        end)
+                    else
+                        log("Compile original failed:", tostring(chunk))
+                    end
+                end
+            else
+                Rayfield:Notify({ Title = "Gagal", Content = msg or "Key salah.", Duration = 4, Image = "x" })
+            end
+        end,
+    })
+
+    -- Get Key button (dummy/help)
+    TabKey:CreateButton({
+        Name   = "Get Key",
+        Callback = function()
+            Rayfield:Notify({
+                Title = "Info",
+                Content = "Ini versi TEST lokal. Set KEY di script (KEYS_PER_ID[UserId] = 'KEYMU').",
+                Duration = 6,
+                Image = "info"
+            })
+        end,
+    })
+
+    -- ==== Teleport Lokasi ====
+    TabTP:CreateSection("Manual Teleport")
     for i = 1, #POINTS do
-        Tab:CreateButton({
+        TabTP:CreateButton({
             Name = ("TP %d"):format(i),
             Callback = function()
+                if not verified then
+                    Rayfield:Notify({ Title = "Belum valid", Content = "Silakan validasi KEY dulu.", Duration = 4, Image = "lock" })
+                    return
+                end
                 teleportTo(i)
             end,
         })
     end
 
-    Tab:CreateSection("Auto Loop")
-    local ToggleLoop = Tab:CreateToggle({
+    TabTP:CreateSection("Auto Loop")
+    local ToggleLoop = TabTP:CreateToggle({
         Name = "Aktifkan Auto Loop",
         CurrentValue = false,
         Flag = "AutoLoop",
         Callback = function(on)
+            if not verified then
+                Rayfield:Notify({ Title = "Belum valid", Content = "Silakan validasi KEY dulu.", Duration = 4, Image = "lock" })
+                return
+            end
             if on then startLoop() else stopLoop() end
         end,
     })
 
-    Tab:CreateSlider({
+    TabTP:CreateSlider({
         Name = "Delay Teleport (detik)",
         Range = {0.1, 30},
         Increment = 0.1,
@@ -238,25 +215,27 @@ local function buildRayfieldUI()
         Callback = function(val) currentDelay = clampDelay(val) end,
     })
 
-    Tab:CreateSection("Keybinds")
+    TabTP:CreateSection("Keybinds")
     for i = 1, #POINTS do
-        Tab:CreateKeybind({
+        TabTP:CreateKeybind({
             Name = ("Keybind TP %d"):format(i),
             CurrentKeybind = tostring(i),
             HoldToInteract = false,
             Flag = ("BindTP%d"):format(i),
             Callback = function()
+                if not verified then return end
                 teleportTo(i)
             end,
         })
     end
 
-    Tab:CreateKeybind({
+    TabTP:CreateKeybind({
         Name = "Toggle Auto Loop",
         CurrentKeybind = TOGGLE_LOOP_KEY,
         HoldToInteract = false,
         Flag = "BindLoop",
         Callback = function()
+            if not verified then return end
             if autoLoop then
                 stopLoop()
                 ToggleLoop:Set(false)
@@ -267,37 +246,14 @@ local function buildRayfieldUI()
         end,
     })
 
-    Rayfield:Notify({ Title = "Siap", Content = "KEY valid. Gunakan tombol TP/Loop/Delay.", Duration = 5, Image = "rocket" })
+    -- ==== Main & Creator (placeholder) ====
+    TabMain:CreateParagraph({ Title = "Main Fiture", Content = "Tambahkan fitur lain di sini." })
+    TabAbout:CreateParagraph({ Title = "Creator", Content = "HRZ Team - UI Testing" })
 end
 
--- ==== RUN: prompt key -> build UI -> run original ====
-local function run()
-    local function onSubmit(key, uiCb)
-        local ok, message = verifyKeyLocal(key)
-        uiCb(ok, message)
-        if ok then
-            task.defer(buildRayfieldUI)
-            -- Execute the original script AFTER verification:
-            local original_src = [===[
-__ORIGINAL__
-]===]
-            local ok2, chunk = pcall(loadstring, original_src)
-            if ok2 and type(chunk) == "function" then
-                local ok3, err = pcall(chunk)
-                if not ok3 then
-                    log("Error running original script:", tostring(err))
-                end
-            else
-                log("Error compiling original script:", tostring(chunk))
-            end
-        end
-    end
-    showKeyPrompt(onSubmit)
-end
-
--- Inject original code placeholder now
+-- ==== RUN ====
 do
-    local original = [===[
+    local original_src = [===[
 -- // Teleporter 7 Pos + Rayfield UI
 -- // Gunakan di game sendiri / testing. Jangan dipakai untuk eksploit di game orang lain.
 
@@ -474,7 +430,5 @@ Tab:CreateKeybind({
 Rayfield:LoadConfiguration() -- sesuai petunjuk config saving
 
 ]===]
-    run = assert(loadstring((string.dump(run)):gsub("__ORIGINAL__", original)))
+    buildRayfieldUI(original_src)
 end
-
-run()
