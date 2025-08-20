@@ -321,10 +321,8 @@ TabLogin:CreateButton({
             })
             -- Buat tab fitur utama setelah login berhasil
             buildFeatureTabs()
-            -- (opsional) Sembunyikan tab Login:
-            if TabLogin and TabLogin.Page then
-                TabLogin.Page.Visible = false
-            end
+            -- Hapus Tab Login dari menu
+            Rayfield:DestroyTab(TabLogin)
         else
             Rayfield:Notify({
                 Title = "Login Gagal",
@@ -334,10 +332,4 @@ TabLogin:CreateButton({
             })
         end
     end,
-})
-
--- (Opsional) Info cara ganti KEY
-TabLogin:CreateParagraph({
-    Title = "Info",
-    Content = "Ganti nilai ALLOWED_KEY di script untuk mengubah KEY login."
 })
