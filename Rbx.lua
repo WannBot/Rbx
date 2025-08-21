@@ -23,10 +23,10 @@ local TOGGLE_KEY = "L"  -- toggle UI loop
 -----------------------------
 -- KEYS: setiap key punya role dan whitelist UserId
 --  - allow = "any"             -> bebas dipakai siapa saja
---  - allow = {Rosto_246, 456, ...}   -> hanya userId di daftar ini
+--  - allow = {9179746755, 456, ...}   -> hanya userId di daftar ini
 local KEYS = {
     ["ADMIN1"] = { role = "ADMIN", allow = "any" },
-    ["VIP1"]  = { role = "VIP",   allow = {Rosto_246, 87654321} },
+    ["VIP1"]  = { role = "VIP",   allow = {9179746755, 87654321} },
     ["USER1"] = { role = "USER",  allow = "any" },
 }
 
