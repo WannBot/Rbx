@@ -1,0 +1,5 @@
+{
+  "ADMIN1": { "role": "ADMIN", "allow": [9179746755] },
+  "VIP1":   { "role": "VIP",   "allow": [9179746755, 87654321] },
+  "FREE":  { "role": "USER",  "allow": "any" }
+}
