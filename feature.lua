@@ -1,66 +1,46 @@
--- // Rayfield UI + Login Key (Role & Whitelist) + Main Fiture (NoClip, Speed) + Teleporter (7 pos)
--- // Modif: KEYS bisa diambil dari KEYS.json (GitHub) + Tab Commands (ADMIN) dengan prefix (;)
--- // Tidak ada fitur Fly.
+-- features.lua — Login (role+whitelist) + Main Fiture (NoClip, Speed, Fling, WalkFling, Invisible Username)
+-- Dua tab teleport di file terpisah: teleport_tab1.lua & teleport_tab2.lua
+-- Tidak ada Fly. Tidak ada Keybinds TP. Tidak ada Tab Commands.
 
 -----------------------------
--- KONFIGURASI POSISI
------------------------------
-local OFFSET_Y = 3
-local POINTS = {
-    -- GANTI koordinat sesuai map-mu:
-    Vector3.new(388, 310, -185),    -- 1
-    Vector3.new(99, 412, 615),      -- 2
-    Vector3.new(10, 601, 998),      -- 3
-    Vector3.new(871, 865, 583),     -- 4
-    Vector3.new(1622, 1080, 157),   -- 5
-    Vector3.new(2969, 1528, 708),   -- 6
-    Vector3.new(1803, 1982, 2169),  -- 7
-}
-local DEFAULT_DELAY = 2 -- detik
-local TOGGLE_KEY = "L"  -- toggle UI loop
-
------------------------------
--- GITHUB SOURCE (optional)
+-- GITHUB SOURCE
 -----------------------------
 local HttpService = game:GetService("HttpService")
--- Ubah BASE jika file KEYS.json ada di path lain/branch lain/folder lain
+-- Ganti ini kalau struktur repo/branch/path berbeda (akhiri dengan '/'):
 local BASE = "https://raw.githubusercontent.com/WannBot/Rbx/refs/heads/main/"
 
-local function fetchKeysFromGit()
-    local ok, raw = pcall(function()
-        return game:HttpGet(BASE .. "KEYS.json")  -- pastikan file ini ada di repo kamu
-    end)
-    if not ok then
-        warn("[features] Gagal ambil KEYS.json:", raw)
-        return nil
-    end
-    local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-    if not ok2 or type(data) ~= "table" then
-        warn("[features] Gagal decode KEYS.json")
-        return nil
-    end
-    return data
+local function fetch(url)
+    local ok, data = pcall(function() return game:HttpGet(url) end)
+    if ok then return data end
+    warn("[features] fetch fail:", data)
+    return nil
+end
+
+local function fetchJSON(url)
+    local raw = fetch(url)
+    if not raw then return nil end
+    local ok, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+    if ok and type(decoded) == "table" then return decoded end
+    warn("[features] json decode fail for:", url)
+    return nil
 end
 
 -----------------------------
 -- KEY & ROLE CONFIG (fallback lokal)
 -----------------------------
 -- Jika KEYS.json gagal diambil, pakai tabel lokal ini.
--- KEYS: setiap key punya role dan whitelist UserId
---  - allow = "any"             -> bebas dipakai siapa saja
---  - allow = {9179746755, ...} -> hanya userId di daftar ini
+-- KEYS: key -> { role="ADMIN|VIP|USER", allow="any"|{UserIds...} }
 local KEYS = {
     ["ADMIN1"] = { role = "ADMIN", allow = "any" },
     ["VIP1"]   = { role = "VIP",   allow = {9179746755, 87654321} },
     ["USER1"]  = { role = "USER",  allow = "any" },
 }
 
--- PERMISSIONS: atur fitur apa saja yang aktif untuk setiap role
--- Ubah true/false sesuai kebutuhanmu
+-- Izin fitur per role (ubah sesuka hati)
 local PERMISSIONS = {
-    ADMIN = { noclip = true,  speed = true,  teleport = true },
-    VIP   = { noclip = false, speed = true,  teleport = true },
-    USER  = { noclip = false, speed = false, teleport = true },
+    ADMIN = { noclip = true,  speed = true,  teleport = true, fling = true,  walkfling = true,  invisUser = true },
+    VIP   = { noclip = false, speed = true,  teleport = true, fling = true,  walkfling = true,  invisUser = true },
+    USER  = { noclip = false, speed = false, teleport = true, fling = false, walkfling = false, invisUser = true },
 }
 
 -----------------------------
@@ -71,14 +51,10 @@ local UIS     = game:GetService("UserInputService")
 local RS      = game:GetService("RunService")
 local player  = Players.LocalPlayer
 
-local currentDelay = DEFAULT_DELAY
-local autoLoop     = false
-local loopThread   = nil
-
 -----------------------------
 -- HELPERS
 -----------------------------
-local function norm(s) -- trim input
+local function norm(s)
     s = tostring(s or "")
     return s:gsub("^%s+",""):gsub("%s+$","")
 end
@@ -86,41 +62,6 @@ end
 local function getCharHum()
     local char = player.Character or player.CharacterAdded:Wait()
     return char, char:WaitForChild("Humanoid"), char:WaitForChild("HumanoidRootPart")
-end
-
-local function clampDelay(x)
-    if type(x) ~= "number" or x <= 0 then return DEFAULT_DELAY end
-    if x < 0.1 then x = 0.1 end
-    if x > 30 then x = 30 end
-    return x
-end
-
------------------------------
--- TELEPORT
------------------------------
-local function teleportTo(i)
-    if i < 1 or i > #POINTS then return end
-    local _, _, hrp = getCharHum()
-    hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
-end
-
-local function startLoop()
-    if autoLoop then return end
-    autoLoop = true
-    loopThread = coroutine.create(function()
-        while autoLoop do
-            for i = 1, #POINTS do
-                if not autoLoop then break end
-                teleportTo(i)
-                task.wait(currentDelay)
-            end
-        end
-    end)
-    coroutine.resume(loopThread)
-end
-
-local function stopLoop()
-    autoLoop = false
 end
 
 -----------------------------
@@ -145,50 +86,35 @@ local function newWindow()
     return Rayfield, Window
 end
 
--- ===== Admin Commands (optional): prefix ';' =====
-local COMMAND_PREFIX = ";"
-local function splitCSV(s)
-    local t = {}
-    for part in tostring(s or ""):gmatch("[^,]+") do
-        local n = tonumber(part)
-        table.insert(t, n or part)
-    end
-    return t
-end
-
--- Bangun tab fitur utama sesuai role/permissions
+-----------------------------
+-- MAIN FEATURE TABS
+-----------------------------
 local function buildFeatureTabs(Window, Rayfield, role)
-    local perms = PERMISSIONS[role] or { noclip=false, speed=false, teleport=true }
+    local perms = PERMISSIONS[role] or { noclip=false, speed=false, teleport=true, fling=false, walkfling=false, invisUser=true }
 
-    -- ===== Tab: Main Fiture (NoClip + Speed) =====
+    -- ===== Tab: Main Fiture =====
     local TabMain = Window:CreateTab("Main Fiture", "layout-grid")
 
-    -- ==== NoClip (jika diizinkan) ====
+    -- NoClip
     if perms.noclip then
-        local noclip = false
-        local noclipConn
+        local noclip, noclipConn = false, nil
         local function setNoClip(state)
-            local char = player.Character
             if state then
                 if noclip then return end
                 noclip = true
                 noclipConn = RS.Stepped:Connect(function()
-                    char = player.Character
+                    local char = player.Character
                     if not char then return end
                     for _, part in ipairs(char:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
+                        if part:IsA("BasePart") then part.CanCollide = false end
                     end
                 end)
             else
                 if not noclip then return end
                 noclip = false
                 if noclipConn then noclipConn:Disconnect() noclipConn = nil end
-                -- biarkan Roblox yang restore collision saat respawn
             end
         end
-
         TabMain:CreateSection("No Clip")
         TabMain:CreateToggle({
             Name = "Aktifkan No Clip",
@@ -198,22 +124,20 @@ local function buildFeatureTabs(Window, Rayfield, role)
         })
     else
         TabMain:CreateSection("No Clip")
-        TabMain:CreateParagraph({ Title = "Tidak tersedia", Content = "Fitur ini tidak aktif untuk role: "..tostring(role) })
+        TabMain:CreateParagraph({ Title = "Tidak tersedia", Content = "Role: "..tostring(role) })
     end
 
-    -- ==== Speed Run (WalkSpeed) (jika diizinkan) ====
+    -- Speed (WalkSpeed)
     if perms.speed then
         local function setRunSpeed(v)
             local _, hum = getCharHum()
             hum.WalkSpeed = math.clamp(tonumber(v) or 16, 1, 200)
         end
-
         TabMain:CreateSection("Speed Run")
         TabMain:CreateSlider({
             Name = "WalkSpeed",
             Range = {16, 200},
             Increment = 1,
-            Suffix = "",
             CurrentValue = 16,
             Flag = "RunSpeed",
             Callback = function(val) setRunSpeed(val) end,
@@ -224,223 +148,145 @@ local function buildFeatureTabs(Window, Rayfield, role)
         })
     else
         TabMain:CreateSection("Speed Run")
-        TabMain:CreateParagraph({ Title = "Tidak tersedia", Content = "Fitur ini tidak aktif untuk role: "..tostring(role) })
+        TabMain:CreateParagraph({ Title = "Tidak tersedia", Content = "Role: "..tostring(role) })
     end
 
-    -- ===== Tab: Teleporter (jika diizinkan) =====
-    if perms.teleport then
-        local Tab = Window:CreateTab("Teleporter", "map-pin")
-
-        Tab:CreateSection("Manual Teleport")
-        for i = 1, #POINTS do
-            Tab:CreateButton({
-                Name = ("TP %d"):format(i),
-                Callback = function() teleportTo(i) end,
-            })
-        end
-
-        Tab:CreateSection("Auto Loop")
-        local ToggleLoop = Tab:CreateToggle({
-            Name = "Aktifkan Auto Loop",
-            CurrentValue = false,
-            Flag = "AutoLoop",
-            Callback = function(on) if on then startLoop() else stopLoop() end end,
-        })
-        Tab:CreateSlider({
-            Name = "Delay Teleport (detik)",
-            Range = {0.1, 30},
-            Increment = 0.1,
-            Suffix = "s",
-            CurrentValue = DEFAULT_DELAY,
-            Flag = "DelayTP",
-            Callback = function(val) currentDelay = clampDelay(val) end,
-        })
-
-        Tab:CreateSection("Keybinds")
-        for i = 1, #POINTS do
-            Tab:CreateKeybind({
-                Name = ("Keybind TP %d"):format(i),
-                CurrentKeybind = tostring(i),
-                HoldToInteract = false,
-                Flag = ("BindTP"..i),
-                Callback = function() teleportTo(i) end,
-            })
-        end
-        Tab:CreateKeybind({
-            Name = "Toggle Auto Loop",
-            CurrentKeybind = TOGGLE_KEY,
-            HoldToInteract = false,
-            Flag = "BindLoop",
-            Callback = function()
-                local newState = not autoLoop
-                ToggleLoop:Set(newState)
-                if newState then startLoop() else stopLoop() end
-            end,
-        })
-
-        Rayfield:Notify({
-            Title = "Teleporter siap",
-            Content = "Role: "..tostring(role),
-            Duration = 3,
-            Image = "map"
-        })
-    else
-        local Tab = Window:CreateTab("Teleporter", "map-pin")
-        Tab:CreateParagraph({ Title = "Tidak tersedia", Content = "Fitur Teleporter nonaktif untuk role: "..tostring(role) })
-    end
-
-    -- ===== Tab: Commands (ADMIN only) =====
-    if tostring(role) == "ADMIN" then
-        local TabCmd = Window:CreateTab("Commands", "terminal")
-        TabCmd:CreateSection("Prefix: " .. COMMAND_PREFIX)
-
-        local help = [[
-Perintah:
-;addkey <KEY> <ROLE> <allow:any|uids:123,456>
-;adduid <KEY> <UserId>
-;deluid <KEY> <UserId>
-;delkey <KEY>
-;setrole <KEY> <ROLE>
-ROLE = ADMIN|VIP|USER
-Contoh:
-;addkey VIP-ABCD VIP uids:123,456
-;addkey USER-000 USER allow:any
-;adduid VIP-ABCD 77777777
-;setrole VIP-ABCD ADMIN
-;delkey USER-000
-Catatan: perubahan ini hanya sementara (client-side).
-Gunakan KEYS.json di GitHub untuk perubahan permanen.
-        ]]
-        TabCmd:CreateParagraph({ Title = "Bantuan", Content = help })
-
-        local function execCommand(line)
-            line = tostring(line or ""):gsub("^%s+",""):gsub("%s+$","")
-            if line == "" then
-                Rayfield:Notify({ Title="Info", Content="Perintah kosong.", Duration=3, Image="info" })
-                return
-            end
-            local cmdline = line
-            if cmdline:sub(1, #COMMAND_PREFIX) == COMMAND_PREFIX then
-                cmdline = cmdline:sub(#COMMAND_PREFIX+1)
-            end
-            local cmd, rest = cmdline:match("^(%S+)%s*(.*)$")
-            cmd = (cmd or ""):lower()
-
-            local function ok(msg)  Rayfield:Notify({ Title="OK",   Content=msg, Duration=3, Image="check" }) end
-            local function err(msg) Rayfield:Notify({ Title="Gagal",Content=msg, Duration=3, Image="x"     }) end
-
-            if cmd == "addkey" then
-                -- addkey KEY ROLE allow:any | uids:1,2,3
-                local key, roleArg, allowArg = rest:match("^(%S+)%s+(%S+)%s+(.*)$")
-                if not key or not roleArg or not allowArg then
-                    err("Format: ;addkey <KEY> <ROLE> <allow:any|uids:123,456>")
-                    return
-                end
-                roleArg = roleArg:upper()
-                if roleArg ~= "ADMIN" and roleArg ~= "VIP" and roleArg ~= "USER" then
-                    err("ROLE harus ADMIN|VIP|USER")
-                    return
-                end
-                local allow
-                local a1, a2 = allowArg:match("^(allow):(any)$")
-                if a1 == "allow" and a2 == "any" then
-                    allow = "any"
-                else
-                    local pfx, list = allowArg:match("^(uids):(.+)$")
-                    if pfx == "uids" then
-                        local ids = splitCSV(list)
-                        local arr = {}
-                        for _,v in ipairs(ids) do
-                            local n = tonumber(v)
-                            if n then table.insert(arr, n) end
-                        end
-                        if #arr == 0 then err("Daftar UserId kosong/invalid") return end
-                        allow = arr
-                    else
-                        err("allow harus 'allow:any' atau 'uids:1,2,3'")
-                        return
-                    end
-                end
-                KEYS[key] = { role = roleArg, allow = allow }
-                ok(("Key %s dibuat: role=%s"):format(key, roleArg))
-
-            elseif cmd == "adduid" then
-                local key, uidStr = rest:match("^(%S+)%s+(%S+)$")
-                local uid = tonumber(uidStr or "")
-                if not key or not uid then err("Format: ;adduid <KEY> <UserId>") return end
-                local entry = KEYS[key]
-                if not entry then err("Key tidak ditemukan") return end
-                if entry.allow == "any" then err("Key ini allow:any, tidak punya daftar uid.") return end
-                if type(entry.allow) ~= "table" then entry.allow = {} end
-                for _,x in ipairs(entry.allow) do if x == uid then err("UserId sudah ada") return end end
-                table.insert(entry.allow, uid)
-                ok(("UserId %d ditambahkan ke %s"):format(uid, key))
-
-            elseif cmd == "deluid" then
-                local key, uidStr = rest:match("^(%S+)%s+(%S+)$")
-                local uid = tonumber(uidStr or "")
-                if not key or not uid then err("Format: ;deluid <KEY> <UserId>") return end
-                local entry = KEYS[key]
-                if not entry or type(entry.allow) ~= "table" then err("Key tidak punya daftar uid.") return end
-                local idx
-                for i,x in ipairs(entry.allow) do if x == uid then idx = i break end end
-                if not idx then err("UserId tidak ada dalam daftar.") return end
-                table.remove(entry.allow, idx)
-                ok(("UserId %d dihapus dari %s"):format(uid, key))
-
-            elseif cmd == "delkey" then
-                local key = rest:match("^(%S+)$")
-                if not key then err("Format: ;delkey <KEY>") return end
-                if not KEYS[key] then err("Key tidak ditemukan") return end
-                KEYS[key] = nil
-                ok(("Key %s dihapus"):format(key))
-
-            elseif cmd == "setrole" then
-                local key, roleArg = rest:match("^(%S+)%s+(%S+)$")
-                if not key or not roleArg then err("Format: ;setrole <KEY> <ROLE>") return end
-                roleArg = roleArg:upper()
-                if roleArg ~= "ADMIN" and roleArg ~= "VIP" and roleArg ~= "USER" then
-                    err("ROLE harus ADMIN|VIP|USER") return
-                end
-                local entry = KEYS[key]
-                if not entry then err("Key tidak ditemukan") return end
-                entry.role = roleArg
-                ok(("Role %s diubah jadi %s"):format(key, roleArg))
-
+    -- Fling (spin)
+    if perms.fling then
+        TabMain:CreateSection("Fling")
+        local flingEnabled, flange, savedVel, connFling = false, 2000, nil, nil
+        local function setFling(state)
+            local _,_,hrp = getCharHum()
+            if state then
+                if flingEnabled then return end
+                flingEnabled = true
+                savedVel = hrp.AssemblyAngularVelocity
+                connFling = RS.Heartbeat:Connect(function()
+                    if not flingEnabled then return end
+                    local _,_,r = getCharHum()
+                    r.AssemblyAngularVelocity = Vector3.new(flange, flange, flange)
+                end)
             else
-                err("Perintah tidak dikenal.")
+                if not flingEnabled then return end
+                flingEnabled = false
+                if connFling then connFling:Disconnect() connFling = nil end
+                local _,_,r = getCharHum()
+                if savedVel then r.AssemblyAngularVelocity = savedVel end
             end
         end
-
-        local cmdText = ""
-        TabCmd:CreateInput({
-            Name = "Ketik perintah",
-            PlaceholderText = COMMAND_PREFIX .. "addkey VIP-ABCD VIP uids:123,456",
-            RemoveTextAfterFocusLost = false,
-            Callback = function(text) cmdText = tostring(text or "") end,
+        TabMain:CreateToggle({
+            Name = "Aktifkan Fling (spin)",
+            CurrentValue = false,
+            Flag = "FlingToggle",
+            Callback = function(on) setFling(on) end,
         })
-        TabCmd:CreateButton({
-            Name = "Jalankan",
-            Callback = function()
-                if cmdText == "" then
-                    Rayfield:Notify({ Title="Info", Content="Perintah kosong.", Duration=3, Image="info" })
-                    return
-                end
-                execCommand(cmdText)
-            end,
+        TabMain:CreateSlider({
+            Name = "Kekuatan Spin",
+            Range = {500, 5000},
+            Increment = 50,
+            CurrentValue = 2000,
+            Flag = "FlingSpin",
+            Callback = function(val) flange = tonumber(val) or flange end,
         })
+    end
 
-        -- via chat (opsional)
-        player.Chatted:Connect(function(msg)
-            if type(msg) == "string" and msg:sub(1, #COMMAND_PREFIX) == COMMAND_PREFIX then
-                execCommand(msg)
+    -- WalkFling
+    if perms.walkfling then
+        TabMain:CreateSection("WalkFling")
+        local wfEnabled, wfPower, connWF = false, 250, nil
+        local function setWalkFling(state)
+            if state then
+                if wfEnabled then return end
+                wfEnabled = true
+                connWF = RS.RenderStepped:Connect(function()
+                    if not wfEnabled then return end
+                    local _, hum, hrp = getCharHum()
+                    local dir = hum.MoveDirection
+                    if dir.Magnitude > 0 then
+                        hrp.AssemblyLinearVelocity = dir.Unit * wfPower
+                    end
+                end)
+            else
+                if not wfEnabled then return end
+                wfEnabled = false
+                if connWF then connWF:Disconnect() connWF = nil end
             end
-        end)
-
-        TabCmd:CreateParagraph({
-            Title = "Catatan",
-            Content = "Perubahan di tab ini hanya sementara (client). Untuk permanen, edit KEYS.json di GitHub."
+        end
+        TabMain:CreateToggle({
+            Name = "Aktifkan WalkFling",
+            CurrentValue = false,
+            Flag = "WalkFlingToggle",
+            Callback = function(on) setWalkFling(on) end,
         })
+        TabMain:CreateSlider({
+            Name = "Kekuatan Dorong",
+            Range = {50, 1000},
+            Increment = 10,
+            CurrentValue = 250,
+            Flag = "WalkFlingPower",
+            Callback = function(val) wfPower = tonumber(val) or wfPower end,
+        })
+    end
+
+    -- Invisible Username (local)
+    if perms.invisUser then
+        TabMain:CreateSection("Invisible Username (Local)")
+        local targetName = ""
+        local function setInvisibleForUsername(name, invisible)
+            name = tostring(name or "")
+            local plr = Players:FindFirstChild(name)
+            if not plr or not plr.Character then return end
+            for _, obj in ipairs(plr.Character:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    obj.LocalTransparencyModifier = invisible and 1 or 0
+                elseif obj:IsA("Decal") then
+                    obj.Transparency = invisible and 1 or 0
+                end
+            end
+        end
+        TabMain:CreateInput({
+            Name = "Username target",
+            PlaceholderText = "misal: PlayerName",
+            RemoveTextAfterFocusLost = false,
+            Callback = function(text) targetName = tostring(text or "") end,
+        })
+        TabMain:CreateButton({
+            Name = "Jadikan Invisible",
+            Callback = function() if targetName ~= "" then setInvisibleForUsername(targetName, true) end end,
+        })
+        TabMain:CreateButton({
+            Name = "Kembalikan (Visible)",
+            Callback = function() if targetName ~= "" then setInvisibleForUsername(targetName, false) end end,
+        })
+    end
+
+    -- ===== Dua Tab Teleport eksternal =====
+    if perms.teleport then
+        -- Tab 1
+        local src1 = fetch(BASE .. "teleport_tab1.lua")
+        if src1 then
+            local ok1, builder1 = pcall(loadstring, src1)
+            if ok1 and type(builder1) == "function" then
+                builder1({ Window = Window, getCharHum = getCharHum })
+            else
+                warn("[features] teleport_tab1.lua load error:", tostring(builder1))
+            end
+        else
+            warn("[features] teleport_tab1.lua not found at BASE path.")
+        end
+
+        -- Tab 2
+        local src2 = fetch(BASE .. "teleport_tab2.lua")
+        if src2 then
+            local ok2, builder2 = pcall(loadstring, src2)
+            if ok2 and type(builder2) == "function" then
+                builder2({ Window = Window, getCharHum = getCharHum })
+            else
+                warn("[features] teleport_tab2.lua load error:", tostring(builder2))
+            end
+        else
+            warn("[features] teleport_tab2.lua not found at BASE path.")
+        end
     end
 
     -- ===== Tab: Info =====
@@ -448,34 +294,29 @@ Gunakan KEYS.json di GitHub untuk perubahan permanen.
     local p = PERMISSIONS[role] or {}
     TabInfo:CreateParagraph({ Title = "Role Aktif", Content = tostring(role) })
     TabInfo:CreateParagraph({ Title = "Permissions", Content =
-        ("noclip=%s, speed=%s, teleport=%s"):format(tostring(p.noclip), tostring(p.speed), tostring(p.teleport)) })
-
-    Rayfield:LoadConfiguration()
+        ("noclip=%s, speed=%s, teleport=%s, fling=%s, walkfling=%s, invisUser=%s")
+        :format(tostring(p.noclip), tostring(p.speed), tostring(p.teleport), tostring(p.fling), tostring(p.walkfling), tostring(p.invisUser)) })
 end
 
--------------------------------------------------
--- LOGIN: Key Manual (Role + Whitelist + Rebuild UI)
--------------------------------------------------
+-----------------------------
+-- LOGIN + REBUILD UI
+-----------------------------
 local function validateKey(inputKey)
     local entry = KEYS[norm(inputKey)]
-    if not entry then
-        return false, "KEY salah.", nil
-    end
+    if not entry then return false, "KEY salah." end
     local allow = entry.allow
-    if allow == "any" then
-        return true, entry.role, entry
-    end
+    if allow == "any" then return true, entry.role end
     local uid = Players.LocalPlayer.UserId
     if typeof(allow) == "table" then
-        for _,x in ipairs(allow) do if x == uid then return true, entry.role, entry end end
-        return false, "KEY bukan untuk akun ini.", nil
+        for _,x in ipairs(allow) do if x == uid then return true, entry.role end end
+        return false, "KEY bukan untuk akun ini."
     end
-    return false, "Whitelist tidak valid.", nil
+    return false, "Whitelist tidak valid."
 end
 
--- 1) Buat Window pertama: HANYA Tab Login
-local Rayfield, Window = newWindow()
-local TabLogin = Window:CreateTab("Login", "lock")
+-- Window 1: Tab Login saja
+local Rayfield1, Window1 = newWindow()
+local TabLogin = Window1:CreateTab("Login", "lock")
 TabLogin:CreateSection("Masukkan KEY untuk melanjutkan")
 
 local typedKey = ""
@@ -489,27 +330,23 @@ TabLogin:CreateInput({
 TabLogin:CreateButton({
     Name = "Login",
     Callback = function()
-        -- coba ambil KEYS dari GitHub; kalau gagal, pakai fallback lokal
-        local remote = fetchKeysFromGit()
-        if remote and type(remote) == "table" then
-            KEYS = remote
-        end
+        local remote = fetchJSON(BASE .. "KEYS.json")
+        if remote and type(remote) == "table" then KEYS = remote end
 
         if typedKey == "" then
-            Rayfield:Notify({ Title = "Login Gagal", Content = "KEY masih kosong.", Duration = 3, Image = "alert-triangle" })
+            Rayfield1:Notify({ Title = "Login Gagal", Content = "KEY masih kosong.", Duration = 3, Image = "alert-triangle" })
             return
         end
 
         local ok, roleOrMsg = validateKey(typedKey)
         if not ok then
-            Rayfield:Notify({ Title = "Login Gagal", Content = tostring(roleOrMsg), Duration = 3, Image = "x" })
+            Rayfield1:Notify({ Title = "Login Gagal", Content = tostring(roleOrMsg), Duration = 3, Image = "x" })
             return
         end
         local role = roleOrMsg or "USER"
+        Rayfield1:Notify({ Title = "Login Berhasil", Content = "Role: "..tostring(role), Duration = 3, Image = "check" })
 
-        Rayfield:Notify({ Title = "Login Berhasil", Content = "Role: "..tostring(role), Duration = 3, Image = "check" })
-
-        -- 2) Hancurkan seluruh Rayfield UI lama (yang berisi Tab Login)
+        -- hancurkan UI lama (tab Login)
         local pg = Players.LocalPlayer:FindFirstChild("PlayerGui")
         if pg then
             for _, gui in ipairs(pg:GetChildren()) do
@@ -519,7 +356,7 @@ TabLogin:CreateButton({
             end
         end
 
-        -- 3) Buat Window BARU tanpa Tab Login, lalu bangun fitur sesuai role
+        -- Window 2: Fitur
         local Rayfield2, Window2 = newWindow()
         buildFeatureTabs(Window2, Rayfield2, role)
         Rayfield2:Notify({ Title = "Siap", Content = "Fitur diaktifkan sesuai role.", Duration = 3, Image = "info" })
