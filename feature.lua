@@ -31,7 +31,7 @@ end
 -- Jika KEYS.json gagal diambil, pakai tabel lokal ini.
 -- KEYS: key -> { role="ADMIN|VIP|USER", allow="any"|{UserIds...} }
 local KEYS = {
-    ["ADMIN1"] = { role = "ADMIN", allow = "any" },
+    ["ADMIN1"] = { role = "ADMIN", allow = {9179746755} },
     ["VIP1"]   = { role = "VIP",   allow = {9179746755, 87654321} },
     ["USER1"]  = { role = "USER",  allow = "any" },
 }
