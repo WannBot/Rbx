@@ -90,26 +90,59 @@ end
 -----------------------------
 -- TELEPORT
 -----------------------------
+-----------------------------
+-- TELEPORT (dengan Auto Respawn di akhir loop)
+-----------------------------
 local function teleportTo(i)
-    if i<1 or i>#POINTS then return end
-    local _,_,hrp = getCharHum()
+    if i < 1 or i > #POINTS then return end
+    local _, _, hrp = getCharHum()
     hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
 end
+
+-- NEW: helper respawn
+local function respawnNow()
+    -- Coba respawn halus
+    local ok = pcall(function()
+        Players.LocalPlayer:LoadCharacter()
+    end)
+    if not ok then
+        -- fallback: paksa mati biar respawn
+        local _, hum = getCharHum()
+        if hum then
+            hum.Health = 0
+        end
+    end
+    -- tunggu body baru siap
+    Players.LocalPlayer.CharacterAdded:Wait()
+    task.wait(0.5) -- sedikit jeda biar stabil
+end
+
+local currentDelay = DEFAULT_DELAY
+local autoLoop     = false
+local loopThread   = nil
+
 local function startLoop()
     if autoLoop then return end
-    autoLoop=true
+    autoLoop = true
     loopThread = coroutine.create(function()
         while autoLoop do
-            for i=1,#POINTS do
+            for i = 1, #POINTS do
                 if not autoLoop then break end
                 teleportTo(i)
                 task.wait(currentDelay)
+                -- NEW: setelah titik terakhir, respawn otomatis
+                if i == #POINTS and autoLoop then
+                    respawnNow()
+                end
             end
         end
     end)
     coroutine.resume(loopThread)
 end
-local function stopLoop() autoLoop=false end
+
+local function stopLoop()
+    autoLoop = false
+end
 
 -----------------------------
 -- RAYFIELD
