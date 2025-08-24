@@ -36,7 +36,7 @@ local function getCharHum()
     return char, char:WaitForChild("Humanoid"), char:WaitForChild("HumanoidRootPart")
 end
 
-local NAME_HINTS = {"spawn", "flag"}
+local NAME_HINTS = {"check point"}
 
 local function getWorldPosFromInstance(inst)
     if inst:IsA("BasePart") then
