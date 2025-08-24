@@ -36,7 +36,7 @@ local function getCharHum()
     return char, char:WaitForChild("Humanoid"), char:WaitForChild("HumanoidRootPart")
 end
 
-local NAME_HINTS = {"POS "}
+local NAME_HINTS = {"POS", "POS 6"}
 
 local function getWorldPosFromInstance(inst)
     if inst:IsA("BasePart") then
