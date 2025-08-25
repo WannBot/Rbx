@@ -1,19 +1,23 @@
 -- Auto Collect Fruits (Client-side only)
--- Gunakan dengan loader kamu (mis. loadstring)
--- Rayfield UI + toggle per buah
+-- Rayfield UI: toggle per buah + slider lama hold + slider delay antar buah
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local RunService = game:GetService("RunService")
 
--- Daftar nama buah yang mau dicari
+-- Daftar nama buah
 local FRUIT_TYPES = {"Coconut", "Beanstalk", "Berry", "Sugar Apple"}
 
--- Auto state per buah
+-- Status auto per buah
 local autoState = {}
-for _,f in ipairs(FRUIT_TYPES) do autoState[f] = false end
+local holdTimes = {}   -- lama hold per buah
+local delays    = {}   -- jeda antar buah per buah
+for _,f in ipairs(FRUIT_TYPES) do
+    autoState[f] = false
+    holdTimes[f] = 3      -- default 3 detik
+    delays[f]    = 1      -- default 1 detik
+end
 
--- Ambil semua objek buah sesuai nama
+-- Cari buah sesuai jenis
 local function getFruitsByType(fruitType)
     local list = {}
     for _,obj in ipairs(workspace:GetDescendants()) do
@@ -28,7 +32,7 @@ local function getFruitsByType(fruitType)
     return list
 end
 
--- Fungsi teleport ke posisi
+-- Teleport ke posisi
 local function teleportTo(pos)
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -37,26 +41,39 @@ local function teleportTo(pos)
     end
 end
 
--- Loop auto collect
-RunService.Heartbeat:Connect(function()
-    for fruitType,on in pairs(autoState) do
-        if on then
+-- Fungsi Auto Collect
+local function autoCollect(fruitType)
+    task.spawn(function()
+        while autoState[fruitType] do
             local fruits = getFruitsByType(fruitType)
             for _,fruit in ipairs(fruits) do
+                if not autoState[fruitType] then break end -- stop jika toggle dimatikan
+
                 teleportTo(fruit.Position)
                 task.wait(0.5)
-                -- kalau ada prompt
+
                 local prompt = fruit.Parent:FindFirstChildOfClass("ProximityPrompt") or fruit:FindFirstChildOfClass("ProximityPrompt")
                 if prompt then
-                    fireproximityprompt(prompt)
+                    -- hold sesuai slider
+                    fireproximityprompt(prompt, 1) -- mulai hold
+                    task.wait(holdTimes[fruitType])
+                    fireproximityprompt(prompt, 0) -- lepas hold
                 end
-                task.wait(1)
-            end
-        end
-    end
-end)
 
--- ====== RAYFIELD UI ======
+                -- jeda antar buah (bisa diatur slider)
+                local t = delays[fruitType] or 1
+                local timer = 0
+                while autoState[fruitType] and timer < t do
+                    task.wait(0.1)
+                    timer += 0.1
+                end
+            end
+            task.wait(1) -- jeda scan ulang
+        end
+    end)
+end
+
+-- ====== Rayfield UI ======
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "WS Auto Collect Fruits",
@@ -77,6 +94,31 @@ for _,fruit in ipairs(FRUIT_TYPES) do
         Flag = "Auto"..fruit,
         Callback = function(val)
             autoState[fruit] = val
+            if val then
+                autoCollect(fruit)
+            end
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Hold "..fruit.." (detik)",
+        Range = {1, 5},
+        Increment = 0.5,
+        CurrentValue = holdTimes[fruit],
+        Flag = "Hold"..fruit,
+        Callback = function(val)
+            holdTimes[fruit] = val
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Delay "..fruit.." (detik)",
+        Range = {0.5, 3},
+        Increment = 0.1,
+        CurrentValue = delays[fruit],
+        Flag = "Delay"..fruit,
+        Callback = function(val)
+            delays[fruit] = val
         end
     })
 end
