@@ -8,12 +8,19 @@
 -----------------------------
 local OFFSET_Y = 3
 local POINTS = {
+    Vector3.new(495, 184, -402),
     Vector3.new(388, 310, -185),
+    Vector3.new(186, 405, 305),
     Vector3.new(99, 412, 615),
+    Vector3.new(-271, 492, 831),
     Vector3.new(10, 601, 998),
+    Vector3.new(761, 830, 894),
     Vector3.new(871, 865, 583),
+    Vector3.new(1236, 1133, 194),
     Vector3.new(1622, 1080, 157),
+    Vector3.new(2494, 1430, 575),
     Vector3.new(2969, 1528, 708),
+    Vector3.new(2132, 1743, 1385),
     Vector3.new(1803, 1982, 2169),
 }
 local DEFAULT_DELAY = 2
