@@ -93,48 +93,64 @@ end
 -----------------------------
 -- TELEPORT (dengan Auto Respawn di akhir loop)
 -----------------------------
+-----------------------------
+-- TELEPORT (mulai dari titik terakhir, respawn 2s di akhir)
+-----------------------------
+local lastTpIndex = 0
+
 local function teleportTo(i)
     if i < 1 or i > #POINTS then return end
     local _, _, hrp = getCharHum()
     hrp.CFrame = CFrame.new(POINTS[i] + Vector3.new(0, OFFSET_Y, 0))
+    lastTpIndex = i
 end
 
--- NEW: helper respawn
 local function respawnNow()
-    -- Coba respawn halus
     local ok = pcall(function()
         Players.LocalPlayer:LoadCharacter()
     end)
     if not ok then
-        -- fallback: paksa mati biar respawn
         local _, hum = getCharHum()
-        if hum then
-            hum.Health = 0
-        end
+        if hum then hum.Health = 0 end
     end
-    -- tunggu body baru siap
     Players.LocalPlayer.CharacterAdded:Wait()
-    task.wait(0.5) -- sedikit jeda biar stabil
+    task.wait(0.5)
 end
 
 local currentDelay = DEFAULT_DELAY
 local autoLoop     = false
 local loopThread   = nil
 
+-- hitung start index (kalau belum ada lastTpIndex, ambil 1)
+local function computeStartIndex()
+    if lastTpIndex >= 1 and lastTpIndex <= #POINTS then
+        local nxt = lastTpIndex + 1
+        if nxt > #POINTS then nxt = 1 end
+        return nxt
+    else
+        return 1
+    end
+end
+
 local function startLoop()
     if autoLoop then return end
     autoLoop = true
     loopThread = coroutine.create(function()
+        local i = computeStartIndex()
         while autoLoop do
-            for i = 1, #POINTS do
-                if not autoLoop then break end
-                teleportTo(i)
+            teleportTo(i)
+
+            if i < #POINTS then
                 task.wait(currentDelay)
-                -- NEW: setelah titik terakhir, respawn otomatis
-                if i == #POINTS and autoLoop then
-                    respawnNow()
-                end
+            else
+                -- titik terakhir → respawn setelah 2 detik
+                task.wait(2)
+                if not autoLoop then break end
+                respawnNow()
             end
+
+            i = i + 1
+            if i > #POINTS then i = 1 end
         end
     end)
     coroutine.resume(loopThread)
