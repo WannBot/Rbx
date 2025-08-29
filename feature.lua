@@ -144,7 +144,7 @@ local function startLoop()
                 task.wait(currentDelay)
             else
                 -- titik terakhir → respawn setelah 2 detik
-                task.wait(2)
+                task.wait(3)
                 if not autoLoop then break end
                 respawnNow()
             end
