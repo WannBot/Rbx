@@ -141,23 +141,33 @@ local function startLoop()
             teleportTo(i)
 
             if i < #POINTS then
-                task.wait(currentDelay)
+                -- titik biasa → pakai delay TP normal
+                local t0 = os.clock()
+                while autoLoop and (os.clock() - t0) < currentDelay do
+                    task.wait(0.05)
+                end
             else
-                -- titik terakhir → respawn setelah 2 detik
-                task.wait(3)
+                -- TITIK TERAKHIR → tunggu 2 detik, respawn, lalu reset & jeda 5 detik
+                local t0 = os.clock()
+                while autoLoop and (os.clock() - t0) < 2 do
+                    task.wait(0.05)
+                end
                 if not autoLoop then break end
                 respawnNow()
+                lastTpIndex = 0   -- reset index
+                -- jeda 5 detik setelah respawn
+                local t1 = os.clock()
+                while autoLoop and (os.clock() - t1) < 5 do
+                    task.wait(0.1)
+                end
             end
 
+            -- next index (wrap ke awal kalau habis)
             i = i + 1
             if i > #POINTS then i = 1 end
         end
     end)
     coroutine.resume(loopThread)
-end
-
-local function stopLoop()
-    autoLoop = false
 end
 
 -----------------------------
