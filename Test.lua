@@ -1,6 +1,4 @@
---// Pastikan sudah punya Rayfield UI Library
--- Contoh: loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
+--// Rayfield UI
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
@@ -12,9 +10,6 @@ local Window = Rayfield:CreateWindow({
         FolderName = "TeleportCFG",
         FileName = "AutoTP"
     },
-    Discord = {
-        Enabled = false,
-    },
     KeySystem = false,
 })
 
@@ -23,26 +18,24 @@ local MainSection = MainTab:CreateSection("Teleport Settings")
 
 -- Variabel utama
 local autoTP = false
-local delayTime = 3 -- default 3 detik
+local delayTime = 3 -- default
 
--- Tombol toggle auto teleport
-local Toggle = MainTab:CreateToggle({
+-- Toggle Auto Teleport
+MainTab:CreateToggle({
     Name = "Auto Teleport",
     CurrentValue = false,
-    Flag = "AutoTP",
     Callback = function(Value)
         autoTP = Value
     end,
 })
 
--- Slider pengaturan delay
-local Slider = MainTab:CreateSlider({
+-- Slider delay
+MainTab:CreateSlider({
     Name = "Delay Teleport (detik)",
     Range = {1, 20},
     Increment = 1,
-    Suffix = "Detik",
     CurrentValue = 3,
-    Flag = "Delay",
+    Suffix = "Detik",
     Callback = function(Value)
         delayTime = Value
     end,
@@ -56,16 +49,28 @@ local function teleportTo(pos)
     end
 end
 
--- Loop utama auto teleport
+-- Fungsi tekan tombol UI
+local function pressBasecampButton()
+    local player = game.Players.LocalPlayer
+    local gui = player:WaitForChild("PlayerGui")
+
+    -- cari tombol "Ke Basecamp"
+    local button = gui:FindFirstChild("Ke Basecamp", true) -- true = recursive search
+    if button and button:IsA("TextButton") then
+        firesignal(button.MouseButton1Click) -- klik manual
+    end
+end
+
+-- Loop auto teleport
 task.spawn(function()
     while task.wait() do
         if autoTP then
-            -- Teleport ke titik pertama
+            -- Teleport ke koordinat pertama
             teleportTo(Vector3.new(3055, 7878, 1034))
             task.wait(delayTime)
 
-            -- Teleport ke titik kedua
-            teleportTo(Vector3.new(-244, 122, 203))
+            -- Tekan tombol "Ke Basecamp"
+            pressBasecampButton()
             task.wait(delayTime)
         end
     end
