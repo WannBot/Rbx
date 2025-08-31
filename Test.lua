@@ -1,145 +1,78 @@
--- LocalScript untuk debug developer
-local RunService = game:GetService("RunService")
+-- LocalScript (StarterPlayerScripts) untuk debug developer
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local gui = player:WaitForChild("PlayerGui")
+
+-- >>> Rayfield UI <<<
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
--- Window utama
 local Window = Rayfield:CreateWindow({
-    Name = "ESP Racun Dinamis",
-    LoadingTitle = "Debug Poison Drinks",
+    Name = "Auto Answer Debug",
+    LoadingTitle = "Quiz Bot",
     LoadingSubtitle = "Rayfield UI",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "ESP_CFG",
-        FileName = "PoisonESP"
+        FolderName = "QuizCFG",
+        FileName = "AutoAnswer"
     },
     KeySystem = false,
 })
 
-local Tab = Window:CreateTab("ESP", 4483362458)
-local Section = Tab:CreateSection("Pengaturan Racun")
+local Tab = Window:CreateTab("Quiz", 4483362458)
+local Section = Tab:CreateSection("Auto Answer Settings")
 
--- daftar atribut racun (dinamis)
-local PoisonAttrs = {
-    "IsPoison" -- default
-}
+local autoAnswer = false
 
-local billboards = {}
+-- Toggle Auto Jawab
+Tab:CreateToggle({
+    Name = "Auto Jawab ( +  -  ×  ÷ )",
+    CurrentValue = false,
+    Callback = function(Value)
+        autoAnswer = Value
+    end,
+})
 
--- fungsi cek apakah part racun
-local function isPoisonPart(part)
-    for _, attr in ipairs(PoisonAttrs) do
-        if part:GetAttribute(attr) == true then
-            return true
-        end
+-- Fungsi parsing soal
+local function parseQuestion(text)
+    -- Bisa menangkap 3 format: +  -  *  /  x  ÷
+    local num1, op, num2 = text:match("(%d+)%s*([%+%-%*/x÷])%s*(%d+)")
+    if not num1 or not op or not num2 then
+        return nil
     end
-    return false
-end
+    num1, num2 = tonumber(num1), tonumber(num2)
 
--- buat Billboard
-local function makeBillboard(adornee, text, color)
-    local b = Instance.new("BillboardGui")
-    b.Size = UDim2.new(0, 100, 0, 50)
-    b.StudsOffset = Vector3.new(0, 3, 0)
-    b.AlwaysOnTop = true
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = color
-    label.TextStrokeTransparency = 0
-    label.Font = Enum.Font.GothamBold
-    label.TextScaled = true
-    label.Parent = b
-
-    b.Adornee = adornee
-    b.Parent = adornee
-    return b
-end
-
--- pasang ESP
-local function attachESP(part)
-    if billboards[part] then return end
-
-    if isPoisonPart(part) then
-        billboards[part] = makeBillboard(part, "☠ RACUN ☠", Color3.fromRGB(255, 0, 0))
-    else
-        billboards[part] = makeBillboard(part, "AMAN", Color3.fromRGB(0, 255, 0))
+    if op == "+" then
+        return num1 + num2
+    elseif op == "-" then
+        return num1 - num2
+    elseif op == "*" or op == "x" or op == "×" then
+        return num1 * num2
+    elseif op == "/" or op == "÷" then
+        -- pembagian, hati-hati pembulatan
+        return num1 / num2
     end
 end
 
--- update label
-local function refresh()
-    for _, part in ipairs(workspace:GetDescendants()) do
-        if part:IsA("BasePart") then
-            if not billboards[part] then
-                attachESP(part)
-            else
-                local isPoison = isPoisonPart(part)
-                local label = billboards[part]:FindFirstChildOfClass("TextLabel")
-                if label then
-                    if isPoison and label.Text ~= "☠ RACUN ☠" then
-                        billboards[part]:Destroy()
-                        billboards[part] = nil
-                        attachESP(part)
-                    elseif not isPoison and label.Text ~= "AMAN" then
-                        billboards[part]:Destroy()
-                        billboards[part] = nil
-                        attachESP(part)
-                    end
-                end
-            end
+-- Fungsi klik tombol jawaban
+local function chooseAnswer(answer)
+    for _, obj in ipairs(gui:GetDescendants()) do
+        if obj:IsA("TextButton") and obj.Text == tostring(answer) then
+            firesignal(obj.MouseButton1Click)
+            print("Jawaban otomatis:", answer)
+            break
         end
     end
 end
 
-RunService.Heartbeat:Connect(refresh)
+-- Loop cek pertanyaan
+game:GetService("RunService").Heartbeat:Connect(function()
+    if not autoAnswer then return end
 
--- === UI Rayfield ===
-Tab:CreateParagraph({Title = "Atribut Racun Aktif", Content = table.concat(PoisonAttrs, ", ")})
-
-Tab:CreateInput({
-    Name = "Tambah Atribut Racun",
-    PlaceholderText = "contoh: IsExpired",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(text)
-        if text ~= "" and not table.find(PoisonAttrs, text) then
-            table.insert(PoisonAttrs, text)
-            Rayfield:Notify({
-                Title = "Atribut Ditambahkan",
-                Content = text .. " sekarang dipakai untuk deteksi racun",
-                Duration = 4
-            })
+    local questionLabel = gui:FindFirstChild("QuestionLabel", true)
+    if questionLabel and questionLabel:IsA("TextLabel") then
+        local result = parseQuestion(questionLabel.Text)
+        if result then
+            chooseAnswer(result)
         end
-    end,
-})
-
-Tab:CreateInput({
-    Name = "Hapus Atribut Racun",
-    PlaceholderText = "contoh: IsExpired",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(text)
-        for i, v in ipairs(PoisonAttrs) do
-            if v == text then
-                table.remove(PoisonAttrs, i)
-                Rayfield:Notify({
-                    Title = "Atribut Dihapus",
-                    Content = text .. " dihapus dari daftar racun",
-                    Duration = 4
-                })
-                break
-            end
-        end
-    end,
-})
-
-Tab:CreateButton({
-    Name = "Lihat Daftar Atribut",
-    Callback = function()
-        Rayfield:Notify({
-            Title = "Atribut Racun Aktif",
-            Content = table.concat(PoisonAttrs, ", "),
-            Duration = 6
-        })
-    end,
-})
+    end
+end)
