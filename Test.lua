@@ -1,54 +1,43 @@
--- LocalScript di StarterPlayerScripts (khusus developer map sendiri)
-
-local Players = game:GetService("Players")
-local CollectionService = game:GetService("CollectionService")
+-- LocalScript untuk debug developer
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
--- >>> LOAD RAYFIELD <<<
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
+-- Window utama
 local Window = Rayfield:CreateWindow({
-    Name = "ESP Racun",
-    LoadingTitle = "Debug Minuman Beracun",
-    LoadingSubtitle = "by Rayfield UI",
+    Name = "ESP Racun Dinamis",
+    LoadingTitle = "Debug Poison Drinks",
+    LoadingSubtitle = "Rayfield UI",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "PoisonCFG",
-        FileName = "ESP"
+        FolderName = "ESP_CFG",
+        FileName = "PoisonESP"
     },
     KeySystem = false,
 })
 
 local Tab = Window:CreateTab("ESP", 4483362458)
-local Section = Tab:CreateSection("Pengaturan ESP")
+local Section = Tab:CreateSection("Pengaturan Racun")
 
--- === Variabel utama ===
-local POISON_ATTR = "IsPoison"
-local DRINK_TAG   = "Drink"
-local POISON_TAG  = "PoisonDrink"
+-- daftar atribut racun (dinamis)
+local PoisonAttrs = {
+    "IsPoison" -- default
+}
 
-local espEnabled = true
-local highlights = {}
 local billboards = {}
 
--- === Fungsi ===
-local function makeHighlight(adornee: Instance)
-    local h = Instance.new("Highlight")
-    h.Name = "PoisonHighlight"
-    h.FillTransparency = 0.5
-    h.OutlineTransparency = 0
-    h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    h.FillColor = Color3.fromRGB(255, 0, 0)
-    h.OutlineColor = Color3.fromRGB(255, 255, 255)
-    h.Adornee = adornee
-    h.Parent = adornee
-    return h
+-- fungsi cek apakah part racun
+local function isPoisonPart(part)
+    for _, attr in ipairs(PoisonAttrs) do
+        if part:GetAttribute(attr) == true then
+            return true
+        end
+    end
+    return false
 end
 
-local function makeBillboard(adornee: Instance)
+-- buat Billboard
+local function makeBillboard(adornee, text, color)
     local b = Instance.new("BillboardGui")
-    b.Name = "PoisonESP"
     b.Size = UDim2.new(0, 100, 0, 50)
     b.StudsOffset = Vector3.new(0, 3, 0)
     b.AlwaysOnTop = true
@@ -56,8 +45,8 @@ local function makeBillboard(adornee: Instance)
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
-    label.Text = "☠ Racun ☠"
-    label.TextColor3 = Color3.fromRGB(255, 0, 0)
+    label.Text = text
+    label.TextColor3 = color
     label.TextStrokeTransparency = 0
     label.Font = Enum.Font.GothamBold
     label.TextScaled = true
@@ -68,80 +57,89 @@ local function makeBillboard(adornee: Instance)
     return b
 end
 
-local function shouldMark(inst: Instance): boolean
-    if CollectionService:HasTag(inst, POISON_TAG) then return true end
-    if inst:GetAttribute(POISON_ATTR) == true then return true end
-    return false
-end
+-- pasang ESP
+local function attachESP(part)
+    if billboards[part] then return end
 
-local function getAdornee(inst: Instance): Instance
-    if inst:IsA("Model") then return inst.PrimaryPart or inst:FindFirstChildWhichIsA("BasePart") or inst end
-    if inst:IsA("BasePart") and inst.Parent and inst.Parent:IsA("Model") then
-        return inst.Parent
+    if isPoisonPart(part) then
+        billboards[part] = makeBillboard(part, "☠ RACUN ☠", Color3.fromRGB(255, 0, 0))
+    else
+        billboards[part] = makeBillboard(part, "AMAN", Color3.fromRGB(0, 255, 0))
     end
-    return inst
 end
 
-local function attach(inst: Instance)
-    if not espEnabled or highlights[inst] then return end
-    local adornee = getAdornee(inst)
-    if not adornee then return end
-
-    highlights[inst] = makeHighlight(adornee)
-    billboards[inst] = makeBillboard(adornee)
-end
-
-local function detach(inst: Instance)
-    if highlights[inst] then highlights[inst]:Destroy() end
-    if billboards[inst] then billboards[inst]:Destroy() end
-    highlights[inst] = nil
-    billboards[inst] = nil
-end
-
+-- update label
 local function refresh()
-    for inst, _ in pairs(highlights) do
-        if not inst:IsDescendantOf(game) or not espEnabled or not shouldMark(inst) then
-            detach(inst)
+    for _, part in ipairs(workspace:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if not billboards[part] then
+                attachESP(part)
+            else
+                local isPoison = isPoisonPart(part)
+                local label = billboards[part]:FindFirstChildOfClass("TextLabel")
+                if label then
+                    if isPoison and label.Text ~= "☠ RACUN ☠" then
+                        billboards[part]:Destroy()
+                        billboards[part] = nil
+                        attachESP(part)
+                    elseif not isPoison and label.Text ~= "AMAN" then
+                        billboards[part]:Destroy()
+                        billboards[part] = nil
+                        attachESP(part)
+                    end
+                end
+            end
         end
     end
-    if not espEnabled then return end
-
-    for _, inst in ipairs(CollectionService:GetTagged(DRINK_TAG)) do
-        if shouldMark(inst) then attach(inst) end
-    end
-    for _, inst in ipairs(CollectionService:GetTagged(POISON_TAG)) do
-        attach(inst)
-    end
 end
 
--- === UI Toggle di Rayfield ===
-Tab:CreateToggle({
-    Name = "ESP Racun",
-    CurrentValue = true,
-    Callback = function(Value)
-        espEnabled = Value
-        refresh()
+RunService.Heartbeat:Connect(refresh)
+
+-- === UI Rayfield ===
+Tab:CreateParagraph({Title = "Atribut Racun Aktif", Content = table.concat(PoisonAttrs, ", ")})
+
+Tab:CreateInput({
+    Name = "Tambah Atribut Racun",
+    PlaceholderText = "contoh: IsExpired",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(text)
+        if text ~= "" and not table.find(PoisonAttrs, text) then
+            table.insert(PoisonAttrs, text)
+            Rayfield:Notify({
+                Title = "Atribut Ditambahkan",
+                Content = text .. " sekarang dipakai untuk deteksi racun",
+                Duration = 4
+            })
+        end
     end,
 })
 
--- === Toggle lewat keyboard G ===
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.G then
-        espEnabled = not espEnabled
-        refresh()
-        print("Poison ESP:", espEnabled)
-    end
-end)
+Tab:CreateInput({
+    Name = "Hapus Atribut Racun",
+    PlaceholderText = "contoh: IsExpired",
+    RemoveTextAfterFocusLost = true,
+    Callback = function(text)
+        for i, v in ipairs(PoisonAttrs) do
+            if v == text then
+                table.remove(PoisonAttrs, i)
+                Rayfield:Notify({
+                    Title = "Atribut Dihapus",
+                    Content = text .. " dihapus dari daftar racun",
+                    Duration = 4
+                })
+                break
+            end
+        end
+    end,
+})
 
--- === Setup awal ===
-CollectionService:GetInstanceAddedSignal(DRINK_TAG):Connect(function(inst)
-    inst:GetAttributeChangedSignal(POISON_ATTR):Connect(function()
-        if shouldMark(inst) then attach(inst) else detach(inst) end
-    end)
-    if shouldMark(inst) then attach(inst) end
-end)
-CollectionService:GetInstanceAddedSignal(POISON_TAG):Connect(attach)
-
-refresh()
-RunService.Heartbeat:Connect(refresh)
+Tab:CreateButton({
+    Name = "Lihat Daftar Atribut",
+    Callback = function()
+        Rayfield:Notify({
+            Title = "Atribut Racun Aktif",
+            Content = table.concat(PoisonAttrs, ", "),
+            Duration = 6
+        })
+    end,
+})
