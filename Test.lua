@@ -1,126 +1,92 @@
+-- LocalScript / Script untuk Auto Teleport
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
-local gui = player:WaitForChild("PlayerGui")
 
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
 local Window = Rayfield:CreateWindow({
-    Name = "Quiz Auto Answer",
-    LoadingTitle = "Quiz Bot",
+    Name = "Auto Teleport",
+    LoadingTitle = "Teleport System",
     LoadingSubtitle = "Rayfield UI",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "QuizCFG",
-        FileName = "AutoAnswer"
+        FolderName = "TeleportCFG",
+        FileName = "AutoTP7"
     },
     KeySystem = false,
 })
-local Tab = Window:CreateTab("Quiz", 4483362458)
-local Section = Tab:CreateSection("Mode Auto Jawab")
 
--- === Variabel ===
-local mode = "OFF"  -- OFF / CLICK / SHOW
+local Tab = Window:CreateTab("Teleport", 4483362458)
+local Section = Tab:CreateSection("Pengaturan Auto Teleport")
 
--- === UI Rayfield Controls ===
-Tab:CreateButton({
-    Name = "Matikan (OFF)",
-    Callback = function()
-        mode = "OFF"
-        print("Mode:", mode)
-    end,
-})
-Tab:CreateButton({
-    Name = "Auto Klik Jawaban",
-    Callback = function()
-        mode = "CLICK"
-        print("Mode:", mode)
-    end,
-})
-Tab:CreateButton({
-    Name = "Hanya Tampilkan Jawaban",
-    Callback = function()
-        mode = "SHOW"
-        print("Mode:", mode)
+-- Toggle status
+local autoTP = false
+Tab:CreateToggle({
+    Name = "Auto Teleport 7 Titik",
+    CurrentValue = false,
+    Callback = function(Value)
+        autoTP = Value
+        print("AutoTP:", autoTP)
     end,
 })
 
--- === UI Display Jawaban ===
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AnswerDisplay"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = gui
+-- === Daftar koordinat ===
+-- index 0 = Basecamp
+local coords = {
+    [0] = Vector3.new(251, 14, -992),     -- Basecamp
+    [1] = Vector3.new(388, 310, -185), 
+    [2] = Vector3.new(99, 412, 615),
+    [3] = Vector3.new(10, 601, 998),
+    [4] = Vector3.new(871, 865, 583),
+    [5] = Vector3.new(1622, 1080, 157), 
+    [6] = Vector3.new(2969, 1528, 708), 
+    [7] = Vector3.new(1803, 1982, 2169), 
+}
 
-local label = Instance.new("TextLabel")
-label.Size = UDim2.new(0, 300, 0, 50)
-label.Position = UDim2.new(0.5, -150, 0.1, 0) -- tengah atas
-label.BackgroundTransparency = 0.3
-label.BackgroundColor3 = Color3.fromRGB(0,0,0)
-label.TextColor3 = Color3.fromRGB(255,255,0)
-label.TextStrokeTransparency = 0
-label.Font = Enum.Font.GothamBold
-label.TextScaled = true
-label.Text = "Mode OFF"
-label.Parent = screenGui
-
--- === Fungsi Parser Soal ===
-local function parseQuestion(text)
-    local num1, op, num2 = text:match("(%d+)%s*([%+%-%*/x÷])%s*(%d+)")
-    if not num1 or not op or not num2 then return nil end
-    num1, num2 = tonumber(num1), tonumber(num2)
-
-    if op == "+" then return num1 + num2
-    elseif op == "-" then return num1 - num2
-    elseif op == "*" or op == "x" or op == "×" then return num1 * num2
-    elseif op == "/" or op == "÷" then return num1 / num2 end
+-- Fungsi teleport
+local function teleportTo(pos)
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        player.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
+    end
 end
 
--- === Fungsi Klik Jawaban ===
-local function clickAnswer(result)
-    for _, obj in ipairs(gui:GetDescendants()) do
-        if obj:IsA("TextButton") and obj.Text == tostring(result) then
-            firesignal(obj.MouseButton1Click)
-            print("Klik jawaban:", result)
-            return
-        end
-        if obj:IsA("ImageButton") or obj:IsA("TextButton") then
-            local labelChild = obj:FindFirstChildWhichIsA("TextLabel")
-            if labelChild and labelChild.Text == tostring(result) then
-                firesignal(obj.MouseButton1Click)
-                print("Klik jawaban:", result)
-                return
+-- Fungsi respawn
+local function respawnPlayer()
+    if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+        player.Character:FindFirstChildOfClass("Humanoid").Health = 0
+    end
+end
+
+-- Loop utama
+task.spawn(function()
+    while task.wait() do
+        if autoTP then
+            -- start dari basecamp (0) -> 1
+            teleportTo(coords[1])
+            print("Teleport Basecamp -> 1")
+            task.wait(30)
+
+            -- 1 -> 2 (30 detik juga)
+            teleportTo(coords[2])
+            print("Teleport 1 -> 2")
+            task.wait(30)
+
+            -- sisanya 10 detik per langkah
+            for i = 3, 7 do
+                teleportTo(coords[i])
+                print("Teleport ke titik", i)
+                if i < 7 then
+                    task.wait(10)
+                end
             end
+
+            -- setelah titik 7 respawn
+            respawnPlayer()
+            print("Respawn setelah titik 7")
+
+            -- tunggu respawn aman
+            task.wait(5)
         end
-    end
-end
-
--- === Loop Deteksi ===
-RunService.Heartbeat:Connect(function()
-    local questionLabel = gui:FindFirstChild("QuestionLabel", true)
-    if not questionLabel or not questionLabel:IsA("TextLabel") then
-        label.Text = "Menunggu soal..."
-        label.TextColor3 = Color3.fromRGB(255,255,0)
-        return
-    end
-
-    local result = parseQuestion(questionLabel.Text)
-    if not result then
-        label.Text = "Soal tidak dikenali"
-        label.TextColor3 = Color3.fromRGB(255,0,0)
-        return
-    end
-
-    if mode == "CLICK" then
-        label.Text = "Auto Klik: " .. tostring(result)
-        label.TextColor3 = Color3.fromRGB(0,255,0)
-        clickAnswer(result)
-
-    elseif mode == "SHOW" then
-        label.Text = "Jawaban: " .. tostring(result)
-        label.TextColor3 = Color3.fromRGB(0,255,0)
-
-    elseif mode == "OFF" then
-        label.Text = "Mode OFF"
-        label.TextColor3 = Color3.fromRGB(255,255,0)
     end
 end)
