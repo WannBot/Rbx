@@ -1,8 +1,8 @@
--- LocalScript / Script untuk Auto Teleport
+-- LocalScript di StarterPlayerScripts
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- === Rayfield UI ===
+-- === Load Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 local Window = Rayfield:CreateWindow({
@@ -12,7 +12,7 @@ local Window = Rayfield:CreateWindow({
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "TeleportCFG",
-        FileName = "AutoTP7"
+        FileName = "AutoTP10"
     },
     KeySystem = false,
 })
@@ -20,10 +20,14 @@ local Window = Rayfield:CreateWindow({
 local Tab = Window:CreateTab("Teleport", 4483362458)
 local Section = Tab:CreateSection("Pengaturan Auto Teleport")
 
--- Toggle status
+-- === Variabel ===
 local autoTP = false
+local delayTime = 5 -- default delay (detik)
+local currentIndex = 1 -- untuk simpan posisi terakhir
+
+-- Toggle Auto Teleport
 Tab:CreateToggle({
-    Name = "Auto Teleport 7 Titik",
+    Name = "Auto Teleport 10 Titik",
     CurrentValue = false,
     Callback = function(Value)
         autoTP = Value
@@ -31,62 +35,54 @@ Tab:CreateToggle({
     end,
 })
 
--- === Daftar koordinat ===
--- index 0 = Basecamp
+-- Slider Delay
+Tab:CreateSlider({
+    Name = "Delay per Teleport",
+    Range = {1, 60},
+    Increment = 1,
+    Suffix = "detik",
+    CurrentValue = 5,
+    Callback = function(Value)
+        delayTime = Value
+        print("Delay diubah ke:", delayTime, "detik")
+    end,
+})
+
+-- === Daftar 10 koordinat ===
 local coords = {
-    [0] = Vector3.new(251, 14, -992),     -- Basecamp
-    [1] = Vector3.new(388, 310, -185), 
-    [2] = Vector3.new(99, 412, 615),
-    [3] = Vector3.new(10, 601, 998),
-    [4] = Vector3.new(871, 865, 583),
-    [5] = Vector3.new(1622, 1080, 157), 
-    [6] = Vector3.new(2969, 1528, 708), 
-    [7] = Vector3.new(1803, 1982, 2169), 
+    Vector3.new(-862, 125, 661),  -- titik 1
+    Vector3.new(-533, 231, 261),  -- titik 2
+    Vector3.new(-636, 315, 16),   -- titik 3
+    Vector3.new(-752, 412, 65),   -- titik 4
+    Vector3.new(-567, 417, 124),  -- titik 5
+    Vector3.new(-657, 488, 383),  -- titik 6
+    Vector3.new(-369, 703, 596),  -- titik 7
+    Vector3.new(-588, 679, 399),  -- titik 8
+    Vector3.new(-288, 873, 83),   -- titik 9
+    Vector3.new(-855, 124, 902),  -- titik 10
 }
 
--- Fungsi teleport
+-- Fungsi Teleport
 local function teleportTo(pos)
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         player.Character.HumanoidRootPart.CFrame = CFrame.new(pos)
     end
 end
 
--- Fungsi respawn
-local function respawnPlayer()
-    if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
-        player.Character:FindFirstChildOfClass("Humanoid").Health = 0
-    end
-end
-
--- Loop utama
+-- Loop Auto Teleport
 task.spawn(function()
     while task.wait() do
         if autoTP then
-            -- start dari basecamp (0) -> 1
-            teleportTo(coords[1])
-            print("Teleport Basecamp -> 1")
-            task.wait(30)
+            teleportTo(coords[currentIndex])
+            print("Teleport ke titik", currentIndex)
 
-            -- 1 -> 2 (30 detik juga)
-            teleportTo(coords[2])
-            print("Teleport 1 -> 2")
-            task.wait(30)
+            task.wait(delayTime)
 
-            -- sisanya 10 detik per langkah
-            for i = 3, 7 do
-                teleportTo(coords[i])
-                print("Teleport ke titik", i)
-                if i < 7 then
-                    task.wait(10)
-                end
+            -- pindah ke titik berikutnya
+            currentIndex = currentIndex + 1
+            if currentIndex > #coords then
+                currentIndex = 1 -- ulang dari awal kalau sudah titik terakhir
             end
-
-            -- setelah titik 7 respawn
-            respawnPlayer()
-            print("Respawn setelah titik 7")
-
-            -- tunggu respawn aman
-            task.wait(5)
         end
     end
 end)
