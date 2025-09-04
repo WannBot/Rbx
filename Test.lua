@@ -53,9 +53,9 @@ local coords = {
     Vector3.new(-862, 125, 661),  -- titik 1
     Vector3.new(-533, 231, 261),  -- titik 2
     Vector3.new(-636, 315, 16),   -- titik 3
-    Vector3.new(-752, 412, 65),   -- titik 4
+    Vector3.new(-751, 411, 65),   -- titik 4
     Vector3.new(-567, 417, 124),  -- titik 5
-    Vector3.new(-657, 488, 383),  -- titik 6
+    Vector3.new(-657, 487, 384),  -- titik 6
     Vector3.new(-369, 703, 596),  -- titik 7
     Vector3.new(-588, 679, 399),  -- titik 8
     Vector3.new(-288, 873, 83),   -- titik 9
