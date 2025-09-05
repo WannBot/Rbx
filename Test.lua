@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
 -- === Load Rayfield ===
@@ -13,44 +14,38 @@ local Tab = Window:CreateTab("Player", 4483362458)
 
 -- Variabel
 local noDamage = false
-local connections = {}
-local walkSpeedValue = 16 -- default speed Roblox
+local walkSpeedValue = 16 -- default Roblox
 
--- Fungsi aktifkan no damage
+-- Fungsi aktifkan no damage full
 local function enableNoDamage(char)
     local humanoid = char:WaitForChild("Humanoid")
 
-    humanoid.Health = humanoid.MaxHealth
-    connections[humanoid] = humanoid.HealthChanged:Connect(function(hp)
-        if noDamage and hp < humanoid.MaxHealth then
+    -- Cegah state yang bisa bikin mati
+    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        if state == Enum.HumanoidStateType.Dead 
+        or state == Enum.HumanoidStateType.FallingDown then
+            humanoid:SetStateEnabled(state, false)
+        end
+    end
+
+    -- Loop per frame: lock health & walkspeed
+    RunService.Heartbeat:Connect(function()
+        if noDamage and humanoid and humanoid.Parent then
             humanoid.Health = humanoid.MaxHealth
+            humanoid.WalkSpeed = walkSpeedValue
         end
     end)
-
-    -- set walkspeed awal sesuai slider
-    humanoid.WalkSpeed = walkSpeedValue
-end
-
--- Fungsi matikan no damage
-local function disableNoDamage(char)
-    local humanoid = char:FindFirstChild("Humanoid")
-    if humanoid and connections[humanoid] then
-        connections[humanoid]:Disconnect()
-        connections[humanoid] = nil
-    end
 end
 
 -- Toggle No Damage
 Tab:CreateToggle({
-    Name = "Aktifkan No Damage",
+    Name = "Aktifkan No Damage (God Mode)",
     CurrentValue = false,
     Callback = function(Value)
         noDamage = Value
         local char = player.Character
         if noDamage and char then
             enableNoDamage(char)
-        elseif not noDamage and char then
-            disableNoDamage(char)
         end
     end,
 })
@@ -71,12 +66,11 @@ Tab:CreateSlider({
     end,
 })
 
--- Pastikan saat respawn ikut
+-- Terapkan saat respawn
 player.CharacterAdded:Connect(function(char)
     if noDamage then
         enableNoDamage(char)
     end
-    -- terapkan walkSpeed
     local humanoid = char:WaitForChild("Humanoid")
     humanoid.WalkSpeed = walkSpeedValue
 end)
