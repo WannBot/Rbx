@@ -1,19 +1,23 @@
 local Players = game:GetService("Players")
-local PathfindingService = game:GetService("PathfindingService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Auto Jalan Bot",
-    LoadingTitle = "Checkpoint Walker",
+    Name = "Auto Walk Natural",
+    LoadingTitle = "Auto Walker",
     LoadingSubtitle = "Rayfield UI",
     KeySystem = false,
 })
-local Tab = Window:CreateTab("Auto Path", 4483362458)
+local Tab = Window:CreateTab("Auto Walk", 4483362458)
 
 -- Variabel
 local autoWalk = false
+local delayTime = 1
+local currentIndex = 1
+
+-- 10 koordinat
 local checkpoints = {
     Vector3.new(-862, 125, 661),
     Vector3.new(-533, 231, 261),
@@ -27,57 +31,57 @@ local checkpoints = {
     Vector3.new(-855, 124, 902),
 }
 
--- Toggle
+-- UI Toggle
 Tab:CreateToggle({
-    Name = "Auto Jalan ke Checkpoints",
+    Name = "Auto Walk ke 10 Titik",
     CurrentValue = false,
     Callback = function(Value)
         autoWalk = Value
+        print("Auto Walk:", autoWalk)
     end,
 })
 
--- Fungsi jalan
+-- Slider Delay antar checkpoint
+Tab:CreateSlider({
+    Name = "Delay antar Checkpoint",
+    Range = {1, 30},
+    Increment = 1,
+    Suffix = "detik",
+    CurrentValue = 1,
+    Callback = function(Value)
+        delayTime = Value
+    end,
+})
+
+-- Fungsi jalan natural
 local function walkTo(targetPos)
     local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
     local humanoid = char:WaitForChild("Humanoid")
-    local root = char:WaitForChild("HumanoidRootPart")
 
-    -- Buat path
-    local path = PathfindingService:CreatePath({
-        AgentRadius = 2,
-        AgentHeight = 5,
-        AgentCanJump = true,
-        AgentJumpHeight = 10,
-        AgentMaxSlope = 45,
-    })
-    path:ComputeAsync(root.Position, targetPos)
-
-    if path.Status == Enum.PathStatus.Complete then
-        print("Path ditemukan ke", targetPos)
-        local waypoints = path:GetWaypoints()
-        for _, waypoint in ipairs(waypoints) do
-            if not autoWalk then return end -- stop kalau toggle off
-            humanoid:MoveTo(waypoint.Position)
-            humanoid.MoveToFinished:Wait()
-            if waypoint.Action == Enum.PathWaypointAction.Jump then
-                humanoid.Jump = true
-            end
-        end
-    else
-        warn("Path gagal, teleport ke", targetPos)
-        root.CFrame = CFrame.new(targetPos) -- fallback teleport
+    -- jalan sampai dekat target
+    while autoWalk and (hrp.Position - targetPos).Magnitude > 5 do
+        local direction = (targetPos - hrp.Position).Unit
+        humanoid:Move(Vector3.new(direction.X, 0, direction.Z), false)
+        RunService.Heartbeat:Wait()
     end
+
+    -- berhenti setelah sampai
+    humanoid:Move(Vector3.new(0, 0, 0), false)
 end
 
--- Loop
+-- Loop jalan berurutan
 task.spawn(function()
-    while task.wait(1) do
+    while task.wait() do
         if autoWalk then
-            for i, pos in ipairs(checkpoints) do
-                if not autoWalk then break end
-                print("Menuju checkpoint", i)
-                walkTo(pos)
-                task.wait(1) -- jeda kecil antar checkpoint
+            walkTo(checkpoints[currentIndex])
+            print("Sampai di titik", currentIndex)
+
+            task.wait(delayTime)
+
+            currentIndex += 1
+            if currentIndex > #checkpoints then
+                currentIndex = 1
             end
         end
     end
