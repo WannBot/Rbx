@@ -1,9 +1,8 @@
--- Auto jalan ke checkpoint (tanpa StarterPlayerScripts)
 local Players = game:GetService("Players")
 local PathfindingService = game:GetService("PathfindingService")
 local player = Players.LocalPlayer
 
--- Load Rayfield
+-- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Auto Jalan Bot",
@@ -11,10 +10,9 @@ local Window = Rayfield:CreateWindow({
     LoadingSubtitle = "Rayfield UI",
     KeySystem = false,
 })
-
 local Tab = Window:CreateTab("Auto Path", 4483362458)
 
--- Variabel kontrol
+-- Variabel
 local autoWalk = false
 local checkpoints = {
     Vector3.new(-862, 125, 661),
@@ -29,7 +27,7 @@ local checkpoints = {
     Vector3.new(-855, 124, 902),
 }
 
--- Toggle untuk aktifkan auto jalan
+-- Toggle
 Tab:CreateToggle({
     Name = "Auto Jalan ke Checkpoints",
     CurrentValue = false,
@@ -38,12 +36,13 @@ Tab:CreateToggle({
     end,
 })
 
--- Fungsi jalan dengan Pathfinding
+-- Fungsi jalan
 local function walkTo(targetPos)
     local char = player.Character or player.CharacterAdded:Wait()
     local humanoid = char:WaitForChild("Humanoid")
     local root = char:WaitForChild("HumanoidRootPart")
 
+    -- Buat path
     local path = PathfindingService:CreatePath({
         AgentRadius = 2,
         AgentHeight = 5,
@@ -51,13 +50,13 @@ local function walkTo(targetPos)
         AgentJumpHeight = 10,
         AgentMaxSlope = 45,
     })
-
     path:ComputeAsync(root.Position, targetPos)
 
     if path.Status == Enum.PathStatus.Complete then
+        print("Path ditemukan ke", targetPos)
         local waypoints = path:GetWaypoints()
         for _, waypoint in ipairs(waypoints) do
-            if not autoWalk then return end -- berhenti kalau toggle off
+            if not autoWalk then return end -- stop kalau toggle off
             humanoid:MoveTo(waypoint.Position)
             humanoid.MoveToFinished:Wait()
             if waypoint.Action == Enum.PathWaypointAction.Jump then
@@ -65,11 +64,12 @@ local function walkTo(targetPos)
             end
         end
     else
-        warn("Path gagal dibuat!")
+        warn("Path gagal, teleport ke", targetPos)
+        root.CFrame = CFrame.new(targetPos) -- fallback teleport
     end
 end
 
--- Loop auto jalan
+-- Loop
 task.spawn(function()
     while task.wait(1) do
         if autoWalk then
@@ -77,6 +77,7 @@ task.spawn(function()
                 if not autoWalk then break end
                 print("Menuju checkpoint", i)
                 walkTo(pos)
+                task.wait(1) -- jeda kecil antar checkpoint
             end
         end
     end
