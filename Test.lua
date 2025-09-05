@@ -1,26 +1,35 @@
--- Auto walk sederhana ke satu target (gunakan executor)
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
--- titik tujuan (ubah ke koordinat checkpointmu)
-local target = Vector3.new(-862, 125, 661)
+-- daftar target koordinat
+local checkpoints = {
+    Vector3.new(-862, 125, 661),
+    Vector3.new(-533, 231, 261),
+    Vector3.new(-636, 315, 16),
+    Vector3.new(-752, 412, 65),
+    Vector3.new(-567, 417, 124),
+    Vector3.new(-657, 488, 383),
+    Vector3.new(-369, 703, 596),
+    Vector3.new(-588, 679, 399),
+    Vector3.new(-288, 873, 83),
+    Vector3.new(-855, 124, 902),
+}
 
-local function autoWalk(targetPos)
+local delayTime = 3 -- jeda antar titik (detik)
+
+-- fungsi auto jalan
+local function walkTo(targetPos)
     local char = player.Character or player.CharacterAdded:Wait()
     local humanoid = char:WaitForChild("Humanoid")
-    local hrp = char:WaitForChild("HumanoidRootPart")
-
-    -- jalan terus ke arah target
-    RunService.Heartbeat:Connect(function()
-        if (hrp.Position - targetPos).Magnitude > 5 then
-            local dir = (targetPos - hrp.Position).Unit
-            humanoid:Move(Vector3.new(dir.X, 0, dir.Z), false)
-        else
-            humanoid:Move(Vector3.new(0,0,0), false)
-            print("Sampai di target")
-        end
-    end)
+    humanoid:MoveTo(targetPos)
+    humanoid.MoveToFinished:Wait()
 end
 
-autoWalk(target)
+-- loop jalan ke semua titik
+while true do
+    for i, pos in ipairs(checkpoints) do
+        walkTo(pos)
+        print("Sampai di titik", i)
+        task.wait(delayTime)
+    end
+end
