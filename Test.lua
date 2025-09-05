@@ -1,99 +1,82 @@
 local Players = game:GetService("Players")
-local PathfindingService = game:GetService("PathfindingService")
 local player = Players.LocalPlayer
 
--- === Load Rayfield UI ===
+-- === Load Rayfield ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Auto Walk Checkpoints",
-    LoadingTitle = "Auto Walker",
+    Name = "Player Tools",
+    LoadingTitle = "God Mode & Speed",
     LoadingSubtitle = "Rayfield UI",
     KeySystem = false,
 })
+local Tab = Window:CreateTab("Player", 4483362458)
 
-local Tab = Window:CreateTab("Auto Walk", 4483362458)
+-- Variabel
+local noDamage = false
+local connections = {}
+local walkSpeedValue = 16 -- default speed Roblox
 
--- === Variabel ===
-local autoWalk = false
-local delayTime = 3
-
--- Daftar koordinat checkpoints
-local checkpoints = {
-    Vector3.new(-862, 125, 661),
-    Vector3.new(-533, 231, 261),
-    Vector3.new(-636, 315, 16),
-    Vector3.new(-752, 412, 65),
-    Vector3.new(-567, 417, 124),
-    Vector3.new(-657, 488, 383),
-    Vector3.new(-369, 703, 596),
-    Vector3.new(-588, 679, 399),
-    Vector3.new(-288, 873, 83),
-    Vector3.new(-855, 124, 902),
-}
-
--- === UI Controls ===
-Tab:CreateToggle({
-    Name = "Auto Walk",
-    CurrentValue = false,
-    Callback = function(Value)
-        autoWalk = Value
-        print("Auto Walk:", autoWalk)
-    end,
-})
-
-Tab:CreateSlider({
-    Name = "Delay antar Checkpoint",
-    Range = {1, 30},
-    Increment = 1,
-    Suffix = "detik",
-    CurrentValue = 3,
-    Callback = function(Value)
-        delayTime = Value
-    end,
-})
-
--- === Fungsi jalan dengan Pathfinding ===
-local function walkTo(targetPos)
-    local char = player.Character or player.CharacterAdded:Wait()
+-- Fungsi aktifkan no damage
+local function enableNoDamage(char)
     local humanoid = char:WaitForChild("Humanoid")
-    local root = char:WaitForChild("HumanoidRootPart")
 
-    local path = PathfindingService:CreatePath({
-        AgentRadius = 2,
-        AgentHeight = 5,
-        AgentCanJump = true,
-        AgentJumpHeight = 10,
-        AgentMaxSlope = 45,
-    })
-
-    path:ComputeAsync(root.Position, targetPos)
-
-    if path.Status == Enum.PathStatus.Complete then
-        local waypoints = path:GetWaypoints()
-        for _, waypoint in ipairs(waypoints) do
-            if not autoWalk then return end -- stop kalau toggle off
-            humanoid:MoveTo(waypoint.Position)
-            humanoid.MoveToFinished:Wait()
-            if waypoint.Action == Enum.PathWaypointAction.Jump then
-                humanoid.Jump = true
-            end
+    humanoid.Health = humanoid.MaxHealth
+    connections[humanoid] = humanoid.HealthChanged:Connect(function(hp)
+        if noDamage and hp < humanoid.MaxHealth then
+            humanoid.Health = humanoid.MaxHealth
         end
-    else
-        warn("Path gagal, teleport fallback:", targetPos)
-        root.CFrame = CFrame.new(targetPos)
+    end)
+
+    -- set walkspeed awal sesuai slider
+    humanoid.WalkSpeed = walkSpeedValue
+end
+
+-- Fungsi matikan no damage
+local function disableNoDamage(char)
+    local humanoid = char:FindFirstChild("Humanoid")
+    if humanoid and connections[humanoid] then
+        connections[humanoid]:Disconnect()
+        connections[humanoid] = nil
     end
 end
 
--- === Loop jalan ke semua checkpoint ===
-task.spawn(function()
-    while task.wait() do
-        if autoWalk then
-            for i, pos in ipairs(checkpoints) do
-                if not autoWalk then break end
-                print("Menuju checkpoint", i)
-                walkTo(pos)
-                task.wait(delayTime)
-            end
+-- Toggle No Damage
+Tab:CreateToggle({
+    Name = "Aktifkan No Damage",
+    CurrentValue = false,
+    Callback = function(Value)
+        noDamage = Value
+        local char = player.Character
+        if noDamage and char then
+            enableNoDamage(char)
+        elseif not noDamage and char then
+            disableNoDamage(char)
         end
+    end,
+})
+
+-- Slider WalkSpeed
+Tab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {16, 200}, -- default 16, max 200
+    Increment = 1,
+    Suffix = "Speed",
+    CurrentValue = 16,
+    Callback = function(Value)
+        walkSpeedValue = Value
+        local char = player.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = walkSpeedValue
+        end
+    end,
+})
+
+-- Pastikan saat respawn ikut
+player.CharacterAdded:Connect(function(char)
+    if noDamage then
+        enableNoDamage(char)
     end
+    -- terapkan walkSpeed
+    local humanoid = char:WaitForChild("Humanoid")
+    humanoid.WalkSpeed = walkSpeedValue
 end)
