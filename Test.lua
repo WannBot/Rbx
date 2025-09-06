@@ -2,75 +2,91 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
--- === Load Rayfield ===
+-- === Load Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Player Tools",
-    LoadingTitle = "God Mode & Speed",
+    Name = "Auto Walk System",
+    LoadingTitle = "Path Bot",
     LoadingSubtitle = "Rayfield UI",
     KeySystem = false,
 })
-local Tab = Window:CreateTab("Player", 4483362458)
+
+local Tab = Window:CreateTab("Auto Walk", 4483362458)
 
 -- Variabel
-local noDamage = false
-local walkSpeedValue = 16 -- default Roblox
+local autoWalk = false
+local delayTime = 1
 
--- Fungsi aktifkan no damage full
-local function enableNoDamage(char)
-    local humanoid = char:WaitForChild("Humanoid")
-
-    -- Cegah state yang bisa bikin mati
-    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
-        if state == Enum.HumanoidStateType.Dead 
-        or state == Enum.HumanoidStateType.FallingDown then
-            humanoid:SetStateEnabled(state, false)
-        end
-    end
-
-    -- Loop per frame: lock health & walkspeed
-    RunService.Heartbeat:Connect(function()
-        if noDamage and humanoid and humanoid.Parent then
-            humanoid.Health = humanoid.MaxHealth
-            humanoid.WalkSpeed = walkSpeedValue
-        end
-    end)
-end
-
--- Toggle No Damage
+-- UI Toggle
 Tab:CreateToggle({
-    Name = "Aktifkan No Damage (God Mode)",
+    Name = "Auto Walk",
     CurrentValue = false,
     Callback = function(Value)
-        noDamage = Value
-        local char = player.Character
-        if noDamage and char then
-            enableNoDamage(char)
-        end
+        autoWalk = Value
+        print("Auto Walk:", autoWalk)
     end,
 })
 
--- Slider WalkSpeed
+-- UI Slider untuk Delay
 Tab:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {16, 200}, -- default 16, max 200
+    Name = "Delay antar Node",
+    Range = {0, 10},
     Increment = 1,
-    Suffix = "Speed",
-    CurrentValue = 16,
+    Suffix = "detik",
+    CurrentValue = 1,
     Callback = function(Value)
-        walkSpeedValue = Value
-        local char = player.Character
-        if char and char:FindFirstChild("Humanoid") then
-            char.Humanoid.WalkSpeed = walkSpeedValue
-        end
+        delayTime = Value
     end,
 })
 
--- Terapkan saat respawn
-player.CharacterAdded:Connect(function(char)
-    if noDamage then
-        enableNoDamage(char)
-    end
+-- Ambil karakter & humanoid
+local function getChar()
+    local char = player.Character or player.CharacterAdded:Wait()
     local humanoid = char:WaitForChild("Humanoid")
-    humanoid.WalkSpeed = walkSpeedValue
+    local root = char:WaitForChild("HumanoidRootPart")
+    return humanoid, root
+end
+
+-- Daftar node jalur
+local route = {
+    workspace.Icebergs.Basecamp["10"].Union,
+    workspace.ObstaclesLocal["20"].Side_Rails,
+    workspace.ObstaclesLocal["30"].Ladder.Side_Rails,
+    workspace.ObstaclesLocal["30"].Ladder.Ice.Icicle_Big,
+    workspace.ObstaclesLocal["40"].Side_Rails,
+    workspace.Ladder.Side_Rails,
+    workspace.ObstaclesLocal["50"].Iceberg1,
+}
+
+-- Fungsi jalan
+local function walkTo(part)
+    local humanoid, root = getChar()
+    humanoid:MoveTo(part.Position)
+
+    while autoWalk and (root.Position - part.Position).Magnitude > 6 do
+        task.wait(0.1)
+
+        -- Auto Jump jika perlu
+        if math.abs(root.Position.Y - part.Position.Y) > 5 then
+            humanoid.Jump = true
+        elseif tostring(part.Name):lower():find("ladder")
+            or tostring(part.Name):lower():find("rail")
+            or tostring(part.Name):lower():find("ice") then
+            humanoid.Jump = true
+        end
+    end
+end
+
+-- Loop utama
+task.spawn(function()
+    while task.wait() do
+        if autoWalk then
+            for i, node in ipairs(route) do
+                if not autoWalk then break end
+                print("Menuju:", node:GetFullName())
+                walkTo(node)
+                task.wait(delayTime)
+            end
+        end
+    end
 end)
