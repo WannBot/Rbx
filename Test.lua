@@ -1,8 +1,7 @@
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
--- === Load Rayfield UI ===
+-- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Auto Walk System",
@@ -17,17 +16,14 @@ local Tab = Window:CreateTab("Auto Walk", 4483362458)
 local autoWalk = false
 local delayTime = 1
 
--- UI Toggle
 Tab:CreateToggle({
     Name = "Auto Walk",
     CurrentValue = false,
     Callback = function(Value)
         autoWalk = Value
-        print("Auto Walk:", autoWalk)
     end,
 })
 
--- UI Slider untuk Delay
 Tab:CreateSlider({
     Name = "Delay antar Node",
     Range = {0, 10},
@@ -43,11 +39,10 @@ Tab:CreateSlider({
 local function getChar()
     local char = player.Character or player.CharacterAdded:Wait()
     local humanoid = char:WaitForChild("Humanoid")
-    local root = char:WaitForChild("HumanoidRootPart")
-    return humanoid, root
+    return humanoid
 end
 
--- Daftar node jalur
+-- Daftar node (HARUS BasePart)
 local route = {
     workspace.Icebergs.Basecamp["10"].Union,
     workspace.ObstaclesLocal["20"].Side_Rails,
@@ -58,32 +53,31 @@ local route = {
     workspace.ObstaclesLocal["50"].Iceberg1,
 }
 
--- Fungsi jalan
+-- Fungsi jalan ke node
 local function walkTo(part)
-    local humanoid, root = getChar()
+    local humanoid = getChar()
+    if not part or not part:IsA("BasePart") then
+        warn("Node bukan BasePart:", part and part.Name or "nil")
+        return
+    end
+
     humanoid:MoveTo(part.Position)
+    humanoid.MoveToFinished:Wait()
 
-    while autoWalk and (root.Position - part.Position).Magnitude > 6 do
-        task.wait(0.1)
-
-        -- Auto Jump jika perlu
-        if math.abs(root.Position.Y - part.Position.Y) > 5 then
-            humanoid.Jump = true
-        elseif tostring(part.Name):lower():find("ladder")
-            or tostring(part.Name):lower():find("rail")
-            or tostring(part.Name):lower():find("ice") then
-            humanoid.Jump = true
-        end
+    -- Auto jump kalau object berpotensi rintangan
+    local lowerName = part.Name:lower()
+    if lowerName:find("ladder") or lowerName:find("rail") or lowerName:find("ice") then
+        humanoid.Jump = true
     end
 end
 
--- Loop utama
+-- Loop jalan
 task.spawn(function()
     while task.wait() do
         if autoWalk then
             for i, node in ipairs(route) do
                 if not autoWalk then break end
-                print("Menuju:", node:GetFullName())
+                print("Menuju ke:", node:GetFullName())
                 walkTo(node)
                 task.wait(delayTime)
             end
