@@ -5,50 +5,55 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Strong Forcefield",
-    LoadingTitle = "God Mode",
-    LoadingSubtitle = "Anti Air & Anti Fall",
+    Name = "Absolute GodMode",
+    LoadingTitle = "100% Anti Damage",
+    LoadingSubtitle = "No Health Drop",
     KeySystem = false,
 })
 
 local Tab = Window:CreateTab("Player", 4483362458)
 
 -- Variabel
-local ffOn = false
-local hbConn
+local godMode = false
 local currentFF
+local hbConn
+local hcConn
 
--- Ambil karakter
-local function getChar()
-    local char = player.Character or player.CharacterAdded:Wait()
-    local hum = char:WaitForChild("Humanoid")
-    return char, hum
-end
-
--- Aktifkan proteksi
+-- Proteksi utama
 local function protect(char)
     local hum = char:WaitForChild("Humanoid")
 
-    -- Forcefield invisible
+    -- ForceField invisible
     if currentFF and currentFF.Parent then currentFF:Destroy() end
     local ff = Instance.new("ForceField")
     ff.Visible = false
     ff.Parent = char
     currentFF = ff
 
-    -- Loop per frame: lock health & cegah fall death
+    -- Disable semua state yang bisa bikin damage
+    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        if state == Enum.HumanoidStateType.Dead 
+        or state == Enum.HumanoidStateType.FallingDown
+        or state == Enum.HumanoidStateType.PlatformStanding
+        or state == Enum.HumanoidStateType.Ragdoll
+        or state == Enum.HumanoidStateType.Swimming then
+            hum:SetStateEnabled(state, false)
+        end
+    end
+
+    -- Lock Health 100% setiap kali ada perubahan
+    if hcConn then hcConn:Disconnect() end
+    hcConn = hum:GetPropertyChangedSignal("Health"):Connect(function()
+        if godMode and hum and hum.Parent and hum.Health < hum.MaxHealth then
+            hum.Health = hum.MaxHealth
+        end
+    end)
+
+    -- Heartbeat backup (jaga kalau ada script nakal)
     if hbConn then hbConn:Disconnect() end
     hbConn = RunService.Heartbeat:Connect(function()
-        if ffOn and hum and hum.Parent then
-            -- Kunci darah penuh
-            hum.Health = hum.MaxHealth
-
-            -- Disable state jatuh/mati
-            hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-            hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-
-            -- Prevent drowning/terrain damage
-            if hum:GetState() == Enum.HumanoidStateType.Swimming and hum.Health < hum.MaxHealth then
+        if godMode and hum and hum.Parent then
+            if hum.Health < hum.MaxHealth then
                 hum.Health = hum.MaxHealth
             end
         end
@@ -58,25 +63,26 @@ end
 -- Matikan proteksi
 local function unprotect()
     if hbConn then hbConn:Disconnect() end
-    hbConn = nil
+    if hcConn then hcConn:Disconnect() end
+    hbConn, hcConn = nil, nil
     if currentFF and currentFF.Parent then currentFF:Destroy() end
     currentFF = nil
 end
 
--- Toggle di UI
+-- Toggle UI
 Tab:CreateToggle({
-    Name = "Strong Forcefield (Anti Damage Besar)",
+    Name = "Absolute GodMode (100% No Damage)",
     CurrentValue = false,
     Callback = function(v)
-        ffOn = v
+        godMode = v
         local char = player.Character
         if char then
-            if ffOn then protect(char) else unprotect() end
+            if godMode then protect(char) else unprotect() end
         end
     end,
 })
 
 -- Respawn handler
 player.CharacterAdded:Connect(function(char)
-    if ffOn then protect(char) end
+    if godMode then protect(char) end
 end)
