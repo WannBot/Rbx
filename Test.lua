@@ -7,7 +7,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Absolute GodMode",
     LoadingTitle = "100% Anti Damage",
-    LoadingSubtitle = "No Health Drop",
+    LoadingSubtitle = "No Death • No Health Drop",
     KeySystem = false,
 })
 
@@ -16,12 +16,15 @@ local Tab = Window:CreateTab("Player", 4483362458)
 -- Variabel
 local godMode = false
 local currentFF
-local hbConn
-local hcConn
+local hbConn, hcConn
 
--- Proteksi utama
+-- Fungsi proteksi
 local function protect(char)
     local hum = char:WaitForChild("Humanoid")
+
+    -- Pastikan darah sangat besar dari awal
+    hum.MaxHealth = math.huge
+    hum.Health = hum.MaxHealth
 
     -- ForceField invisible
     if currentFF and currentFF.Parent then currentFF:Destroy() end
@@ -30,7 +33,7 @@ local function protect(char)
     ff.Parent = char
     currentFF = ff
 
-    -- Disable semua state yang bisa bikin damage
+    -- Disable state yg bisa bikin mati/jatuh
     for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
         if state == Enum.HumanoidStateType.Dead 
         or state == Enum.HumanoidStateType.FallingDown
@@ -41,7 +44,7 @@ local function protect(char)
         end
     end
 
-    -- Lock Health 100% setiap kali ada perubahan
+    -- Lock Health (tidak boleh turun)
     if hcConn then hcConn:Disconnect() end
     hcConn = hum:GetPropertyChangedSignal("Health"):Connect(function()
         if godMode and hum and hum.Parent and hum.Health < hum.MaxHealth then
@@ -49,7 +52,7 @@ local function protect(char)
         end
     end)
 
-    -- Heartbeat backup (jaga kalau ada script nakal)
+    -- Backup lock di Heartbeat
     if hbConn then hbConn:Disconnect() end
     hbConn = RunService.Heartbeat:Connect(function()
         if godMode and hum and hum.Parent then
@@ -60,7 +63,7 @@ local function protect(char)
     end)
 end
 
--- Matikan proteksi
+-- Fungsi stop proteksi
 local function unprotect()
     if hbConn then hbConn:Disconnect() end
     if hcConn then hcConn:Disconnect() end
@@ -69,9 +72,9 @@ local function unprotect()
     currentFF = nil
 end
 
--- Toggle UI
+-- Toggle di UI
 Tab:CreateToggle({
-    Name = "Absolute GodMode (100% No Damage)",
+    Name = "Absolute GodMode (100% Anti Damage)",
     CurrentValue = false,
     Callback = function(v)
         godMode = v
