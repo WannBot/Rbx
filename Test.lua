@@ -5,89 +5,80 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Legend Mode God",
-    LoadingTitle = "Absolute GodMode",
-    LoadingSubtitle = "For 1% HP Mode",
+    Name = "Coin Debug Tools",
+    LoadingTitle = "Extra Coin System",
+    LoadingSubtitle = "Multiplier & Auto Increase",
     KeySystem = false,
 })
 
-local Tab = Window:CreateTab("GodMode", 4483362458)
+local Tab = Window:CreateTab("Coins", 4483362458)
 
--- State
-local godOn = false
-local hbConn, hcConn
+-- ==== State ====
+local coinMultiplier = 1.0
+local autoCoin = false
+local coinFolder
+local coinVal
+local hbConn
 
-local function protect(char)
-    local hum = char:WaitForChild("Humanoid")
-    local hrp = char:WaitForChild("HumanoidRootPart")
-
-    -- Pastikan darah & MaxHealth di-boost
-    hum.MaxHealth = 1e9
-    hum.Health = hum.MaxHealth
-
-    -- Disable state berbahaya
-    for _, st in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
-        if st == Enum.HumanoidStateType.Dead
-        or st == Enum.HumanoidStateType.FallingDown
-        or st == Enum.HumanoidStateType.PlatformStanding
-        or st == Enum.HumanoidStateType.Ragdoll
-        or st == Enum.HumanoidStateType.Swimming then
-            hum:SetStateEnabled(st, false)
-        end
-    end
-
-    -- Signal lock: kalau Health berubah, langsung pulihkan
-    if hcConn then hcConn:Disconnect() end
-    hcConn = hum:GetPropertyChangedSignal("Health"):Connect(function()
-        if godOn and hum.Health < hum.MaxHealth then
-            hum.MaxHealth = 1e9
-            hum.Health = hum.MaxHealth
-        end
-    end)
-
-    -- Heartbeat brute force
-    if hbConn then hbConn:Disconnect() end
-    hbConn = RunService.Heartbeat:Connect(function()
-        if godOn and hum and hum.Parent then
-            if hum.Health < hum.MaxHealth then
-                hum.MaxHealth = 1e9
-                hum.Health = hum.MaxHealth
+-- cari folder leaderstats / coins
+local function findCoin()
+    if player:FindFirstChild("leaderstats") then
+        local ls = player.leaderstats
+        for _, v in pairs(ls:GetChildren()) do
+            if v:IsA("IntValue") or v:IsA("NumberValue") then
+                if v.Name:lower():find("coin") or v.Name:lower():find("money") then
+                    return v
+                end
             end
         end
-        -- anti break joints (jika server coba hancurkan karakter)
-        if not char:FindFirstChild("HumanoidRootPart") then
-            local newRoot = Instance.new("Part")
-            newRoot.Name = "HumanoidRootPart"
-            newRoot.Size = Vector3.new(2,2,1)
-            newRoot.Anchored = false
-            newRoot.CanCollide = true
-            newRoot.CFrame = CFrame.new(0,50,0)
-            newRoot.Parent = char
-            hum.RootPart = newRoot
-        end
-    end)
+    end
+    return nil
 end
 
-local function unprotect()
-    if hbConn then hbConn:Disconnect() end
-    if hcConn then hcConn:Disconnect() end
-    hbConn, hcConn = nil, nil
+-- tambah koin manual
+local function addCoins(amount)
+    coinVal = coinVal or findCoin()
+    if coinVal then
+        coinVal.Value = coinVal.Value + math.floor(amount * coinMultiplier)
+        print("[Coin Debug] +"..math.floor(amount * coinMultiplier).." (x"..coinMultiplier..")")
+    else
+        warn("[Coin Debug] Coin value tidak ditemukan!")
+    end
 end
 
--- UI Toggle
-Tab:CreateToggle({
-    Name = "Legend GodMode (1% HP Safe)",
-    CurrentValue = false,
-    Callback = function(v)
-        godOn = v
-        local char = player.Character
-        if char then
-            if godOn then protect(char) else unprotect() end
-        end
-    end,
+-- UI: multiplier slider
+Tab:CreateSlider({
+    Name = "Coin Multiplier",
+    Range = {1, 10},  -- 1x sampai 10x (100% - 1000%)
+    Increment = 1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Callback = function(val)
+        coinMultiplier = val
+    end
 })
 
--- Respawn handler
-player.CharacterAdded:Connect(function(char)
-    if godOn then protect(char) end
-end)
+-- UI: button tambah 100 coin
+Tab:CreateButton({
+    Name = "Tambah 100 Coin (pakai multiplier)",
+    Callback = function()
+        addCoins(100)
+    end
+})
+
+-- UI: auto increase toggle
+Tab:CreateToggle({
+    Name = "Auto Increase Coins",
+    CurrentValue = false,
+    Callback = function(v)
+        autoCoin = v
+        if hbConn then hbConn:Disconnect() hbConn = nil end
+        if autoCoin then
+            coinVal = findCoin()
+            if not coinVal then warn("Coin tidak ditemukan!") return end
+            hbConn = RunService.Heartbeat:Connect(function()
+                addCoins(1) -- tiap frame nambah 1 * multiplier
+            end)
+        end
+    end
+})
