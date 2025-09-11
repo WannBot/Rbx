@@ -1,4 +1,3 @@
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
@@ -6,87 +5,89 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Absolute GodMode",
-    LoadingTitle = "100% Anti Damage",
-    LoadingSubtitle = "No Death • No Health Drop",
+    Name = "Legend Mode God",
+    LoadingTitle = "Absolute GodMode",
+    LoadingSubtitle = "For 1% HP Mode",
     KeySystem = false,
 })
 
-local Tab = Window:CreateTab("Player", 4483362458)
+local Tab = Window:CreateTab("GodMode", 4483362458)
 
--- Variabel
-local godMode = false
-local currentFF
+-- State
+local godOn = false
 local hbConn, hcConn
 
--- Fungsi proteksi
 local function protect(char)
     local hum = char:WaitForChild("Humanoid")
+    local hrp = char:WaitForChild("HumanoidRootPart")
 
-    -- Pastikan darah sangat besar dari awal
-    hum.MaxHealth = math.huge
+    -- Pastikan darah & MaxHealth di-boost
+    hum.MaxHealth = 1e9
     hum.Health = hum.MaxHealth
 
-    -- ForceField invisible
-    if currentFF and currentFF.Parent then currentFF:Destroy() end
-    local ff = Instance.new("ForceField")
-    ff.Visible = false
-    ff.Parent = char
-    currentFF = ff
-
-    -- Disable state yg bisa bikin mati/jatuh
-    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
-        if state == Enum.HumanoidStateType.Dead 
-        or state == Enum.HumanoidStateType.FallingDown
-        or state == Enum.HumanoidStateType.PlatformStanding
-        or state == Enum.HumanoidStateType.Ragdoll
-        or state == Enum.HumanoidStateType.Swimming then
-            hum:SetStateEnabled(state, false)
+    -- Disable state berbahaya
+    for _, st in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        if st == Enum.HumanoidStateType.Dead
+        or st == Enum.HumanoidStateType.FallingDown
+        or st == Enum.HumanoidStateType.PlatformStanding
+        or st == Enum.HumanoidStateType.Ragdoll
+        or st == Enum.HumanoidStateType.Swimming then
+            hum:SetStateEnabled(st, false)
         end
     end
 
-    -- Lock Health (tidak boleh turun)
+    -- Signal lock: kalau Health berubah, langsung pulihkan
     if hcConn then hcConn:Disconnect() end
     hcConn = hum:GetPropertyChangedSignal("Health"):Connect(function()
-        if godMode and hum and hum.Parent and hum.Health < hum.MaxHealth then
+        if godOn and hum.Health < hum.MaxHealth then
+            hum.MaxHealth = 1e9
             hum.Health = hum.MaxHealth
         end
     end)
 
-    -- Backup lock di Heartbeat
+    -- Heartbeat brute force
     if hbConn then hbConn:Disconnect() end
     hbConn = RunService.Heartbeat:Connect(function()
-        if godMode and hum and hum.Parent then
+        if godOn and hum and hum.Parent then
             if hum.Health < hum.MaxHealth then
+                hum.MaxHealth = 1e9
                 hum.Health = hum.MaxHealth
             end
+        end
+        -- anti break joints (jika server coba hancurkan karakter)
+        if not char:FindFirstChild("HumanoidRootPart") then
+            local newRoot = Instance.new("Part")
+            newRoot.Name = "HumanoidRootPart"
+            newRoot.Size = Vector3.new(2,2,1)
+            newRoot.Anchored = false
+            newRoot.CanCollide = true
+            newRoot.CFrame = CFrame.new(0,50,0)
+            newRoot.Parent = char
+            hum.RootPart = newRoot
         end
     end)
 end
 
--- Fungsi stop proteksi
 local function unprotect()
     if hbConn then hbConn:Disconnect() end
     if hcConn then hcConn:Disconnect() end
     hbConn, hcConn = nil, nil
-    if currentFF and currentFF.Parent then currentFF:Destroy() end
-    currentFF = nil
 end
 
--- Toggle di UI
+-- UI Toggle
 Tab:CreateToggle({
-    Name = "Absolute GodMode (100% Anti Damage)",
+    Name = "Legend GodMode (1% HP Safe)",
     CurrentValue = false,
     Callback = function(v)
-        godMode = v
+        godOn = v
         local char = player.Character
         if char then
-            if godMode then protect(char) else unprotect() end
+            if godOn then protect(char) else unprotect() end
         end
     end,
 })
 
 -- Respawn handler
 player.CharacterAdded:Connect(function(char)
-    if godMode then protect(char) end
+    if godOn then protect(char) end
 end)
