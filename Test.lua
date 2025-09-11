@@ -23,14 +23,12 @@ local function setupFly()
     hum = char:WaitForChild("Humanoid")
     hrp = char:WaitForChild("HumanoidRootPart")
 
-    -- BodyGyro
     bg = Instance.new("BodyGyro")
     bg.P = 9e4
     bg.MaxTorque = Vector3.new(9e9,9e9,9e9)
     bg.CFrame = hrp.CFrame
     bg.Parent = hrp
 
-    -- BodyVelocity
     bv = Instance.new("BodyVelocity")
     bv.MaxForce = Vector3.new(9e9,9e9,9e9)
     bv.Velocity = Vector3.zero
@@ -41,14 +39,12 @@ local function setupFly()
         if flyOn and hrp and hrp.Parent then
             bg.CFrame = workspace.CurrentCamera.CFrame
             local camCF = workspace.CurrentCamera.CFrame
-            local moveDir = hum.MoveDirection -- joystick input HP
+            local moveDir = hum.MoveDirection -- joystick input (X,Z)
 
             if moveDir.Magnitude > 0 then
-                -- arah joystick dikombinasikan dengan kamera
-                local camForward = camCF.LookVector
-                local camRight = camCF.RightVector
-                local move = (camForward * moveDir.Z + camRight * moveDir.X).Unit
-                bv.Velocity = Vector3.new(move.X, move.Y, move.Z) * flySpeed
+                -- gunakan kamera sebagai arah penuh (termasuk Y)
+                local dir = (camCF.LookVector * moveDir.Z + camCF.RightVector * moveDir.X).Unit
+                bv.Velocity = dir * flySpeed
             else
                 bv.Velocity = Vector3.zero
             end
@@ -58,7 +54,7 @@ local function setupFly()
     end)
 end
 
--- === UI Control ===
+-- === UI ===
 Tab:CreateToggle({
     Name = "Fly ON/OFF",
     CurrentValue = false,
