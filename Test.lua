@@ -7,7 +7,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Fly Debug",
     LoadingTitle = "Fly Mobile",
-    LoadingSubtitle = "Joystick + Kamera",
+    LoadingSubtitle = "Joystick + Kamera (Fix Arah)",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Fly", 4483362458)
@@ -39,12 +39,17 @@ local function setupFly()
         if flyOn and hrp and hrp.Parent then
             bg.CFrame = workspace.CurrentCamera.CFrame
             local camCF = workspace.CurrentCamera.CFrame
-            local moveDir = hum.MoveDirection -- joystick input (X,Z)
+            local moveDir = hum.MoveDirection
 
             if moveDir.Magnitude > 0 then
-                -- gunakan kamera sebagai arah penuh (termasuk Y)
-                local dir = (camCF.LookVector * moveDir.Z + camCF.RightVector * moveDir.X).Unit
-                bv.Velocity = dir * flySpeed
+                -- arahkan moveDir ke arah kamera (termasuk Y)
+                local camForward = camCF.LookVector
+                local camRight = camCF.RightVector
+                -- proyeksikan input joystick ke kamera
+                local dir = (camForward * moveDir.Z + camRight * moveDir.X)
+                if dir.Magnitude > 0 then
+                    bv.Velocity = dir.Unit * flySpeed
+                end
             else
                 bv.Velocity = Vector3.zero
             end
