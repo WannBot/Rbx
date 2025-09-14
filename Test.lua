@@ -18,16 +18,16 @@ local magnetOn = false
 local magnetRange = 1000
 local teleOn = false
 local tpConn
+local tpDelay = 0.15
 local multiplier = 2 -- X2 coin
 
--- Cari HRP
+-- === Helper ===
 local function getHRP()
     local char = player.Character or player.CharacterAdded:Wait()
     hum = char:WaitForChild("Humanoid")
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- Cari folder GoldStuds
 local function getGoldFolder()
     local lego = workspace:FindFirstChild("LEGO%")
     if lego then
@@ -64,7 +64,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- === Teleport Collect ===
+-- === Teleport Collect Long Range ===
 local function startTeleportLoop()
     hrp = getHRP()
     local goldFolder = getGoldFolder()
@@ -76,7 +76,7 @@ local function startTeleportLoop()
             local hitbox = model:FindFirstChild("HitBox")
             if hitbox and hitbox:IsA("BasePart") then
                 hrp.CFrame = hitbox.CFrame + Vector3.new(0, 3, 0)
-                task.wait(0.15) -- jeda antar teleport
+                task.wait(tpDelay) -- jeda antar teleport
             end
         end
     end)
@@ -116,5 +116,16 @@ Tab:CreateToggle({
         else
             stopTeleportLoop()
         end
+    end
+})
+
+Tab:CreateSlider({
+    Name = "Teleport Delay",
+    Range = {0.05, 1},
+    Increment = 0.05,
+    Suffix = "sec",
+    CurrentValue = tpDelay,
+    Callback = function(val)
+        tpDelay = val
     end
 })
