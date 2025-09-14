@@ -69,7 +69,7 @@ Tab:CreateToggle({
 
 Tab:CreateSlider({
     Name = "Magnet Range",
-    Range = {100, 2000},
+    Range = {100, 20000000},
     Increment = 50,
     Suffix = "stud",
     CurrentValue = magnetRange,
