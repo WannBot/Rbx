@@ -5,25 +5,29 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Magnet Collect",
-    LoadingTitle = "Auto Collect",
-    LoadingSubtitle = "GoldStuds HitBox",
+    Name = "Coin Debug",
+    LoadingTitle = "Magnet + Teleport + x2 Coin",
+    LoadingSubtitle = "Client Side",
     KeySystem = false,
 })
-local Tab = Window:CreateTab("Magnet", 4483362458)
+local Tab = Window:CreateTab("Coins", 4483362458)
 
 -- === State ===
+local hrp, hum
 local magnetOn = false
 local magnetRange = 1000
-local hrp, goldFolder
+local teleOn = false
+local tpConn
+local multiplier = 2 -- X2 coin
 
 -- Cari HRP
 local function getHRP()
     local char = player.Character or player.CharacterAdded:Wait()
+    hum = char:WaitForChild("Humanoid")
     return char:WaitForChild("HumanoidRootPart")
 end
 
--- Path coin folder
+-- Cari folder GoldStuds
 local function getGoldFolder()
     local lego = workspace:FindFirstChild("LEGO%")
     if lego then
@@ -31,18 +35,22 @@ local function getGoldFolder()
     end
 end
 
--- Tarik item ke player
-local function pull(part, hrp)
-    if part and part:IsA("BasePart") and hrp then
-        part.CFrame = hrp.CFrame + Vector3.new(0, -2, 0)
-    end
-end
+-- === X2 Coin Client Side (visual only) ===
+task.spawn(function()
+    local stats = player:WaitForChild("leaderstats")
+    local coins = stats:WaitForChild("Coins")
+    coins:GetPropertyChangedSignal("Value"):Connect(function()
+        if coins.Value > 0 then
+            coins.Value = coins.Value * multiplier
+        end
+    end)
+end)
 
--- Loop magnet
+-- === Magnet Collect ===
 RunService.Heartbeat:Connect(function()
     if not magnetOn then return end
     hrp = hrp or getHRP()
-    goldFolder = goldFolder or getGoldFolder()
+    local goldFolder = getGoldFolder()
     if not (hrp and goldFolder) then return end
 
     for _, model in pairs(goldFolder:GetChildren()) do
@@ -50,30 +58,63 @@ RunService.Heartbeat:Connect(function()
         if hitbox and hitbox:IsA("BasePart") then
             local dist = (hitbox.Position - hrp.Position).Magnitude
             if dist <= magnetRange then
-                pull(hitbox, hrp)
+                hitbox.CFrame = hrp.CFrame + Vector3.new(0, -2, 0)
             end
         end
     end
 end)
 
+-- === Teleport Collect ===
+local function startTeleportLoop()
+    hrp = getHRP()
+    local goldFolder = getGoldFolder()
+    if not (hrp and goldFolder) then return end
+
+    tpConn = RunService.Heartbeat:Connect(function()
+        if not teleOn then return end
+        for _, model in pairs(goldFolder:GetChildren()) do
+            local hitbox = model:FindFirstChild("HitBox")
+            if hitbox and hitbox:IsA("BasePart") then
+                hrp.CFrame = hitbox.CFrame + Vector3.new(0, 3, 0)
+                task.wait(0.15) -- jeda antar teleport
+            end
+        end
+    end)
+end
+
+local function stopTeleportLoop()
+    if tpConn then tpConn:Disconnect() tpConn = nil end
+end
+
 -- === UI Control ===
 Tab:CreateToggle({
-    Name = "Magnet ON/OFF",
+    Name = "Magnet Collect ON/OFF",
     CurrentValue = false,
     Callback = function(v)
         magnetOn = v
-        hrp = nil -- refresh
-        goldFolder = nil
     end
 })
 
 Tab:CreateSlider({
     Name = "Magnet Range",
-    Range = {100, 20000000},
+    Range = {100, 2000},
     Increment = 50,
     Suffix = "stud",
     CurrentValue = magnetRange,
     Callback = function(val)
         magnetRange = val
+    end
+})
+
+Tab:CreateToggle({
+    Name = "Teleport Collect ON/OFF",
+    CurrentValue = false,
+    Callback = function(v)
+        teleOn = v
+        if teleOn then
+            startTeleportLoop()
+        else
+            stopTeleportLoop()
+        end
     end
 })
