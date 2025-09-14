@@ -5,82 +5,75 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Fly Debug",
-    LoadingTitle = "Fly Mobile",
-    LoadingSubtitle = "Joystick + Kamera (Fix Arah)",
+    Name = "Magnet Collect",
+    LoadingTitle = "Auto Collect",
+    LoadingSubtitle = "GoldStuds HitBox",
     KeySystem = false,
 })
-local Tab = Window:CreateTab("Fly", 4483362458)
+local Tab = Window:CreateTab("Magnet", 4483362458)
 
 -- === State ===
-local flyOn = false
-local flySpeed = 60
-local hrp, hum, bg, bv
+local magnetOn = false
+local magnetRange = 1000
+local hrp, goldFolder
 
--- === Setup Fly ===
-local function setupFly()
+-- Cari HRP
+local function getHRP()
     local char = player.Character or player.CharacterAdded:Wait()
-    hum = char:WaitForChild("Humanoid")
-    hrp = char:WaitForChild("HumanoidRootPart")
-
-    bg = Instance.new("BodyGyro")
-    bg.P = 9e4
-    bg.MaxTorque = Vector3.new(9e9,9e9,9e9)
-    bg.CFrame = hrp.CFrame
-    bg.Parent = hrp
-
-    bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(9e9,9e9,9e9)
-    bv.Velocity = Vector3.zero
-    bv.Parent = hrp
-
-    -- Loop Fly
-    RunService.Heartbeat:Connect(function()
-        if flyOn and hrp and hrp.Parent then
-            bg.CFrame = workspace.CurrentCamera.CFrame
-            local camCF = workspace.CurrentCamera.CFrame
-            local moveDir = hum.MoveDirection
-
-            if moveDir.Magnitude > 0 then
-                -- arahkan moveDir ke arah kamera (termasuk Y)
-                local camForward = camCF.LookVector
-                local camRight = camCF.RightVector
-                -- proyeksikan input joystick ke kamera
-                local dir = (camForward * moveDir.Z + camRight * moveDir.X)
-                if dir.Magnitude > 0 then
-                    bv.Velocity = dir.Unit * flySpeed
-                end
-            else
-                bv.Velocity = Vector3.zero
-            end
-        elseif bv then
-            bv.Velocity = Vector3.zero
-        end
-    end)
+    return char:WaitForChild("HumanoidRootPart")
 end
 
--- === UI ===
+-- Path coin folder
+local function getGoldFolder()
+    local lego = workspace:FindFirstChild("LEGO%")
+    if lego then
+        return lego:FindFirstChild("GoldStuds")
+    end
+end
+
+-- Tarik item ke player
+local function pull(part, hrp)
+    if part and part:IsA("BasePart") and hrp then
+        part.CFrame = hrp.CFrame + Vector3.new(0, -2, 0)
+    end
+end
+
+-- Loop magnet
+RunService.Heartbeat:Connect(function()
+    if not magnetOn then return end
+    hrp = hrp or getHRP()
+    goldFolder = goldFolder or getGoldFolder()
+    if not (hrp and goldFolder) then return end
+
+    for _, model in pairs(goldFolder:GetChildren()) do
+        local hitbox = model:FindFirstChild("HitBox")
+        if hitbox and hitbox:IsA("BasePart") then
+            local dist = (hitbox.Position - hrp.Position).Magnitude
+            if dist <= magnetRange then
+                pull(hitbox, hrp)
+            end
+        end
+    end
+end)
+
+-- === UI Control ===
 Tab:CreateToggle({
-    Name = "Fly ON/OFF",
+    Name = "Magnet ON/OFF",
     CurrentValue = false,
     Callback = function(v)
-        flyOn = v
-        if flyOn then
-            setupFly()
-        else
-            if bg then bg:Destroy() bg = nil end
-            if bv then bv:Destroy() bv = nil end
-        end
+        magnetOn = v
+        hrp = nil -- refresh
+        goldFolder = nil
     end
 })
 
 Tab:CreateSlider({
-    Name = "Fly Speed",
-    Range = {10, 200},
-    Increment = 5,
-    Suffix = "spd",
-    CurrentValue = flySpeed,
+    Name = "Magnet Range",
+    Range = {100, 2000},
+    Increment = 50,
+    Suffix = "stud",
+    CurrentValue = magnetRange,
     Callback = function(val)
-        flySpeed = val
+        magnetRange = val
     end
 })
