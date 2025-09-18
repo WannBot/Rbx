@@ -2,24 +2,10 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
--- === Rayfield UI ===
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-local Window = Rayfield:CreateWindow({
-    Name = "Main Debug Menu",
-    LoadingTitle = "Debug Tools",
-    LoadingSubtitle = "GodMode + Magnet + Movement",
-    KeySystem = false,
-})
-local Tab = Window:CreateTab("Main", 4483362458)
-
 -- === State ===
 local hrp, hum
 local godMode = false
 local ff
-local magnetOn = false
-local magnetRange = 1000
-local walkSpeed = 16
-local jumpPower = 50
 
 -- === Helper ===
 local function getChar()
@@ -29,14 +15,7 @@ local function getChar()
     return char
 end
 
-local function getGoldFolder()
-    local lego = workspace:FindFirstChild("LEGO%")
-    if lego then
-        return lego:FindFirstChild("GoldStuds")
-    end
-end
-
--- === GOD MODE ===
+-- Lock HP function
 local function lockHealth()
     if hum then
         hum.MaxHealth = math.huge
@@ -44,6 +23,7 @@ local function lockHealth()
     end
 end
 
+-- Enable God
 local function enableGod()
     local char = getChar()
     lockHealth()
@@ -55,7 +35,10 @@ local function enableGod()
         ff.Parent = char
     end
 
-    -- Listener untuk cegah damage kecil
+    -- Patch TakeDamage agar tidak berfungsi
+    hum.TakeDamage = function() end
+
+    -- Listener untuk Health
     hum:GetPropertyChangedSignal("Health"):Connect(function()
         if godMode and hum.Health < hum.MaxHealth then
             lockHealth()
@@ -63,90 +46,13 @@ local function enableGod()
     end)
 end
 
+-- Loop setiap frame
 RunService.Heartbeat:Connect(function()
-    if godMode and hum then
-        lockHealth()
+    if godMode then
+        if not hum then getChar() end
+        if hum then lockHealth() end
     end
 end)
 
--- === MAGNET COLLECT ===
-RunService.Heartbeat:Connect(function()
-    if not magnetOn then return end
-    hrp = hrp or getChar():WaitForChild("HumanoidRootPart")
-    local goldFolder = getGoldFolder()
-    if not (hrp and goldFolder) then return end
-
-    for _, model in pairs(goldFolder:GetChildren()) do
-        local hitbox = model:FindFirstChild("HitBox")
-        if hitbox and hitbox:IsA("BasePart") then
-            local dist = (hitbox.Position - hrp.Position).Magnitude
-            if dist <= magnetRange then
-                hitbox.CFrame = hrp.CFrame + Vector3.new(0, -2, 0)
-            end
-        end
-    end
-end)
-
--- === SPEED & JUMP ===
-RunService.Heartbeat:Connect(function()
-    local char = getChar()
-    if hum then
-        hum.WalkSpeed = walkSpeed
-        hum.JumpPower = jumpPower
-    end
-end)
-
--- === UI ===
-Tab:CreateToggle({
-    Name = "Absolute GodMode",
-    CurrentValue = false,
-    Callback = function(v)
-        godMode = v
-        if godMode then
-            enableGod()
-        else
-            if ff then ff:Destroy() ff = nil end
-        end
-    end
-})
-
-Tab:CreateToggle({
-    Name = "Magnet Collect ON/OFF",
-    CurrentValue = false,
-    Callback = function(v)
-        magnetOn = v
-    end
-})
-
-Tab:CreateSlider({
-    Name = "Magnet Range",
-    Range = {100, 2000},
-    Increment = 50,
-    Suffix = "stud",
-    CurrentValue = magnetRange,
-    Callback = function(val)
-        magnetRange = val
-    end
-})
-
-Tab:CreateSlider({
-    Name = "Walk Speed",
-    Range = {16, 300},
-    Increment = 5,
-    Suffix = "spd",
-    CurrentValue = walkSpeed,
-    Callback = function(val)
-        walkSpeed = val
-    end
-})
-
-Tab:CreateSlider({
-    Name = "Jump Power",
-    Range = {50, 500},
-    Increment = 10,
-    Suffix = "jmp",
-    CurrentValue = jumpPower,
-    Callback = function(val)
-        jumpPower = val
-    end
-})
+-- === Example Toggle ===
+-- Misal kamu pakai UI Rayfield toggle, callback-nya cukup set godMode = true/false
