@@ -35,16 +35,14 @@ local function getGoldFolder()
     end
 end
 
--- === ABSOLUTE GOD MODE ===
+-- === ABSOLUTE GOD MODE (Fix Anti-Freeze) ===
 RunService.Heartbeat:Connect(function()
     local char = getChar()
     if godMode and hum then
-        -- reset HP penuh setiap frame
-        hum.Health = hum.MaxHealth
-        -- cegah physics damage
+        hum.Health = hum.MaxHealth -- selalu full
         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        hum:ChangeState(Enum.HumanoidStateType.Physics)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
     end
 end)
 
