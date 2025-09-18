@@ -7,7 +7,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Main Debug Menu",
     LoadingTitle = "Debug Tools",
-    LoadingSubtitle = "Hardcore GodMode + Tools",
+    LoadingSubtitle = "Absolute Lock GodMode",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Main", 4483362458)
@@ -19,7 +19,7 @@ local magnetOn = false
 local magnetRange = 1000
 local walkSpeed = 16
 local jumpPower = 50
-local ff -- forcefield
+local ff
 
 -- === Helper ===
 local function getChar()
@@ -36,30 +36,41 @@ local function getGoldFolder()
     end
 end
 
--- === GOD MODE HARDCORE ===
-RunService.Heartbeat:Connect(function()
+-- === ABSOLUTE LOCK GOD MODE ===
+local function enableGod()
     local char = getChar()
-    if godMode and hum then
-        -- Lock Health & MaxHealth
-        hum.MaxHealth = math.huge
-        hum.Health = hum.MaxHealth
+    hum.MaxHealth = math.huge
+    hum.Health = hum.MaxHealth
 
-        -- Tambahkan forcefield tidak terlihat
-        if not ff or not ff.Parent then
-            ff = Instance.new("ForceField")
-            ff.Visible = false
-            ff.Parent = char
+    -- forcefield tidak terlihat
+    if not ff or not ff.Parent then
+        ff = Instance.new("ForceField")
+        ff.Visible = false
+        ff.Parent = char
+    end
+
+    -- matikan state berbahaya
+    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
+        if state == Enum.HumanoidStateType.FallingDown
+        or state == Enum.HumanoidStateType.Ragdoll
+        or state == Enum.HumanoidStateType.Dead then
+            hum:SetStateEnabled(state, false)
         end
+    end
 
-        -- Matikan semua state berbahaya
-        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+    -- kunci Health agar nggak pernah berubah
+    hum:GetPropertyChangedSignal("Health"):Connect(function()
+        if godMode and hum.Health < hum.MaxHealth then
+            hum.Health = hum.MaxHealth
+        end
+    end)
+end
 
-        -- Paksa hidup
-        if hum.Health <= 0 then
+RunService.Heartbeat:Connect(function()
+    if godMode then
+        local char = getChar()
+        if hum then
+            hum.MaxHealth = math.huge
             hum.Health = hum.MaxHealth
         end
     end
@@ -94,13 +105,14 @@ end)
 
 -- === UI ===
 Tab:CreateToggle({
-    Name = "Absolute Hardcore GodMode",
+    Name = "Absolute Lock GodMode",
     CurrentValue = false,
     Callback = function(v)
         godMode = v
-        if not v and ff then
-            ff:Destroy()
-            ff = nil
+        if godMode then
+            enableGod()
+        else
+            if ff then ff:Destroy() ff = nil end
         end
     end
 })
