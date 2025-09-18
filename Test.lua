@@ -5,27 +5,27 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Coin Debug",
-    LoadingTitle = "Magnet + Teleport + x2 Coin",
-    LoadingSubtitle = "Client Side",
+    Name = "Main Debug Menu",
+    LoadingTitle = "Debug Tools",
+    LoadingSubtitle = "God + Magnet + Movement",
     KeySystem = false,
 })
-local Tab = Window:CreateTab("Coins", 4483362458)
+local Tab = Window:CreateTab("Main", 4483362458)
 
 -- === State ===
 local hrp, hum
+local godMode = false
 local magnetOn = false
 local magnetRange = 1000
-local teleOn = false
-local tpConn
-local tpDelay = 0.15
-local multiplier = 2 -- X2 coin
+local walkSpeed = 16
+local jumpPower = 50
 
 -- === Helper ===
-local function getHRP()
+local function getChar()
     local char = player.Character or player.CharacterAdded:Wait()
     hum = char:WaitForChild("Humanoid")
-    return char:WaitForChild("HumanoidRootPart")
+    hrp = char:WaitForChild("HumanoidRootPart")
+    return char
 end
 
 local function getGoldFolder()
@@ -35,21 +35,24 @@ local function getGoldFolder()
     end
 end
 
--- === X2 Coin Client Side (visual only) ===
-task.spawn(function()
-    local stats = player:WaitForChild("leaderstats")
-    local coins = stats:WaitForChild("Coins")
-    coins:GetPropertyChangedSignal("Value"):Connect(function()
-        if coins.Value > 0 then
-            coins.Value = coins.Value * multiplier
-        end
-    end)
+-- === GOD MODE ===
+RunService.Heartbeat:Connect(function()
+    local char = getChar()
+    if godMode and hum then
+        -- reset HP penuh
+        hum.Health = hum.MaxHealth
+        -- cegah ragdoll jatuh
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        -- cegah damage jatuh
+        hum:ChangeState(Enum.HumanoidStateType.Physics)
+    end
 end)
 
 -- === Magnet Collect ===
 RunService.Heartbeat:Connect(function()
     if not magnetOn then return end
-    hrp = hrp or getHRP()
+    hrp = hrp or getChar():WaitForChild("HumanoidRootPart")
     local goldFolder = getGoldFolder()
     if not (hrp and goldFolder) then return end
 
@@ -64,29 +67,24 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- === Teleport Collect Long Range ===
-local function startTeleportLoop()
-    hrp = getHRP()
-    local goldFolder = getGoldFolder()
-    if not (hrp and goldFolder) then return end
+-- === Speed & Jump ===
+RunService.Heartbeat:Connect(function()
+    local char = getChar()
+    if hum then
+        hum.WalkSpeed = walkSpeed
+        hum.JumpPower = jumpPower
+    end
+end)
 
-    tpConn = RunService.Heartbeat:Connect(function()
-        if not teleOn then return end
-        for _, model in pairs(goldFolder:GetChildren()) do
-            local hitbox = model:FindFirstChild("HitBox")
-            if hitbox and hitbox:IsA("BasePart") then
-                hrp.CFrame = hitbox.CFrame + Vector3.new(0, 3, 0)
-                task.wait(tpDelay) -- jeda antar teleport
-            end
-        end
-    end)
-end
+-- === UI ===
+Tab:CreateToggle({
+    Name = "God Mode (Anti Damage)",
+    CurrentValue = false,
+    Callback = function(v)
+        godMode = v
+    end
+})
 
-local function stopTeleportLoop()
-    if tpConn then tpConn:Disconnect() tpConn = nil end
-end
-
--- === UI Control ===
 Tab:CreateToggle({
     Name = "Magnet Collect ON/OFF",
     CurrentValue = false,
@@ -106,26 +104,24 @@ Tab:CreateSlider({
     end
 })
 
-Tab:CreateToggle({
-    Name = "Teleport Collect ON/OFF",
-    CurrentValue = false,
-    Callback = function(v)
-        teleOn = v
-        if teleOn then
-            startTeleportLoop()
-        else
-            stopTeleportLoop()
-        end
+Tab:CreateSlider({
+    Name = "Walk Speed",
+    Range = {16, 300},
+    Increment = 5,
+    Suffix = "spd",
+    CurrentValue = walkSpeed,
+    Callback = function(val)
+        walkSpeed = val
     end
 })
 
 Tab:CreateSlider({
-    Name = "Teleport Delay",
-    Range = {0.05, 1},
-    Increment = 0.05,
-    Suffix = "sec",
-    CurrentValue = tpDelay,
+    Name = "Jump Power",
+    Range = {50, 500},
+    Increment = 10,
+    Suffix = "jmp",
+    CurrentValue = jumpPower,
     Callback = function(val)
-        tpDelay = val
+        jumpPower = val
     end
 })
