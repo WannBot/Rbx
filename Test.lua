@@ -7,7 +7,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Main Debug Menu",
     LoadingTitle = "Debug Tools",
-    LoadingSubtitle = "God + Magnet + Movement",
+    LoadingSubtitle = "Absolute GodMode + Tools",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Main", 4483362458)
@@ -35,16 +35,15 @@ local function getGoldFolder()
     end
 end
 
--- === GOD MODE ===
+-- === ABSOLUTE GOD MODE ===
 RunService.Heartbeat:Connect(function()
     local char = getChar()
     if godMode and hum then
-        -- reset HP penuh
+        -- reset HP penuh setiap frame
         hum.Health = hum.MaxHealth
-        -- cegah ragdoll jatuh
+        -- cegah physics damage
         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        -- cegah damage jatuh
         hum:ChangeState(Enum.HumanoidStateType.Physics)
     end
 end)
@@ -78,7 +77,7 @@ end)
 
 -- === UI ===
 Tab:CreateToggle({
-    Name = "God Mode (Anti Damage)",
+    Name = "Absolute GodMode",
     CurrentValue = false,
     Callback = function(v)
         godMode = v
