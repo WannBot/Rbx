@@ -7,7 +7,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Main Debug Menu",
     LoadingTitle = "Debug Tools",
-    LoadingSubtitle = "Absolute GodMode + Tools",
+    LoadingSubtitle = "Hardcore GodMode + Tools",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Main", 4483362458)
@@ -19,6 +19,7 @@ local magnetOn = false
 local magnetRange = 1000
 local walkSpeed = 16
 local jumpPower = 50
+local ff -- forcefield
 
 -- === Helper ===
 local function getChar()
@@ -35,15 +36,32 @@ local function getGoldFolder()
     end
 end
 
--- === ABSOLUTE GOD MODE (No Freeze) ===
+-- === GOD MODE HARDCORE ===
 RunService.Heartbeat:Connect(function()
     local char = getChar()
     if godMode and hum then
-        hum.Health = hum.MaxHealth -- isi penuh setiap frame
-        -- cegah jatuh/ragdoll
+        -- Lock Health & MaxHealth
+        hum.MaxHealth = math.huge
+        hum.Health = hum.MaxHealth
+
+        -- Tambahkan forcefield tidak terlihat
+        if not ff or not ff.Parent then
+            ff = Instance.new("ForceField")
+            ff.Visible = false
+            ff.Parent = char
+        end
+
+        -- Matikan semua state berbahaya
         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        -- TIDAK disable Physics lagi, biar bisa gerak
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+
+        -- Paksa hidup
+        if hum.Health <= 0 then
+            hum.Health = hum.MaxHealth
+        end
     end
 end)
 
@@ -76,10 +94,14 @@ end)
 
 -- === UI ===
 Tab:CreateToggle({
-    Name = "Absolute GodMode",
+    Name = "Absolute Hardcore GodMode",
     CurrentValue = false,
     Callback = function(v)
         godMode = v
+        if not v and ff then
+            ff:Destroy()
+            ff = nil
+        end
     end
 })
 
