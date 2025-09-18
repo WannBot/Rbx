@@ -7,7 +7,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Main Debug Menu",
     LoadingTitle = "Debug Tools",
-    LoadingSubtitle = "Absolute Lock GodMode",
+    LoadingSubtitle = "GodMode + Magnet + Movement",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Main", 4483362458)
@@ -15,11 +15,11 @@ local Tab = Window:CreateTab("Main", 4483362458)
 -- === State ===
 local hrp, hum
 local godMode = false
+local ff
 local magnetOn = false
 local magnetRange = 1000
 local walkSpeed = 16
 local jumpPower = 50
-local ff
 
 -- === Helper ===
 local function getChar()
@@ -36,47 +36,40 @@ local function getGoldFolder()
     end
 end
 
--- === ABSOLUTE LOCK GOD MODE ===
+-- === GOD MODE ===
+local function lockHealth()
+    if hum then
+        hum.MaxHealth = math.huge
+        hum.Health = hum.MaxHealth
+    end
+end
+
 local function enableGod()
     local char = getChar()
-    hum.MaxHealth = math.huge
-    hum.Health = hum.MaxHealth
+    lockHealth()
 
-    -- forcefield tidak terlihat
+    -- ForceField invisible
     if not ff or not ff.Parent then
         ff = Instance.new("ForceField")
         ff.Visible = false
         ff.Parent = char
     end
 
-    -- matikan state berbahaya
-    for _, state in ipairs(Enum.HumanoidStateType:GetEnumItems()) do
-        if state == Enum.HumanoidStateType.FallingDown
-        or state == Enum.HumanoidStateType.Ragdoll
-        or state == Enum.HumanoidStateType.Dead then
-            hum:SetStateEnabled(state, false)
-        end
-    end
-
-    -- kunci Health agar nggak pernah berubah
+    -- Listener untuk cegah damage kecil
     hum:GetPropertyChangedSignal("Health"):Connect(function()
         if godMode and hum.Health < hum.MaxHealth then
-            hum.Health = hum.MaxHealth
+            lockHealth()
         end
     end)
 end
 
 RunService.Heartbeat:Connect(function()
-    if godMode then
-        local char = getChar()
-        if hum then
-            hum.MaxHealth = math.huge
-            hum.Health = hum.MaxHealth
-        end
+    if godMode and hum then
+        lockHealth()
     end
 end)
 
--- === Magnet Collect ===
+-- === MAGNET COLLECT ===
 RunService.Heartbeat:Connect(function()
     if not magnetOn then return end
     hrp = hrp or getChar():WaitForChild("HumanoidRootPart")
@@ -94,7 +87,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- === Speed & Jump ===
+-- === SPEED & JUMP ===
 RunService.Heartbeat:Connect(function()
     local char = getChar()
     if hum then
@@ -105,7 +98,7 @@ end)
 
 -- === UI ===
 Tab:CreateToggle({
-    Name = "Absolute Lock GodMode",
+    Name = "Absolute GodMode",
     CurrentValue = false,
     Callback = function(v)
         godMode = v
