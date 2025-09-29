@@ -11,9 +11,16 @@ local speedMultiplier = 1.0
 local fileName = "AutoWalkPaths.json"
 
 local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local root = character:WaitForChild("HumanoidRootPart")
+local character, humanoid, root
+
+-- Fungsi untuk update character setiap respawn
+local function bindCharacter(char)
+    character = char
+    humanoid = char:WaitForChild("Humanoid")
+    root = char:WaitForChild("HumanoidRootPart")
+end
+bindCharacter(player.Character or player.CharacterAdded:Wait())
+player.CharacterAdded:Connect(bindCharacter)
 
 -- Load file jika ada
 if isfile(fileName) then
@@ -21,20 +28,53 @@ if isfile(fileName) then
     savedPaths = HttpService:JSONDecode(data)
 end
 
--- Fungsi simpan file
-local function saveToFile()
-    writefile(fileName, HttpService:JSONEncode(savedPaths))
+-- Fungsi encode/decode Vector3
+local function encodePath(path)
+    local out = {}
+    for _,v in ipairs(path) do
+        table.insert(out, {x = v.X, y = v.Y, z = v.Z})
+    end
+    return out
 end
+
+local function decodePath(path)
+    local out = {}
+    for _,v in ipairs(path) do
+        if typeof(v) == "table" and v.x and v.y and v.z then
+            table.insert(out, Vector3.new(v.x, v.y, v.z))
+        end
+    end
+    return out
+end
+
+-- Save file
+local function saveToFile()
+    local encoded = {}
+    for name, path in pairs(savedPaths) do
+        encoded[name] = encodePath(path)
+    end
+    writefile(fileName, HttpService:JSONEncode(encoded))
+end
+
+-- Load file decode
+local function loadFromFile()
+    if not isfile(fileName) then return end
+    local data = readfile(fileName)
+    local decoded = HttpService:JSONDecode(data)
+    local result = {}
+    for name, path in pairs(decoded) do
+        result[name] = decodePath(path)
+    end
+    savedPaths = result
+end
+
+loadFromFile()
 
 -- Fungsi main playback
 local function playPath(path)
-    if not path or #path == 0 then return end
+    if not path or #path == 0 or not humanoid then return end
     humanoid.WalkSpeed = 16 * speedMultiplier
     for _,pos in ipairs(path) do
-        -- konversi dari JSON table ke Vector3
-        if typeof(pos) == "table" and pos.x and pos.y and pos.z then
-            pos = Vector3.new(pos.x, pos.y, pos.z)
-        end
         humanoid:MoveTo(pos)
         humanoid.MoveToFinished:Wait()
     end
@@ -54,9 +94,8 @@ local Window = Rayfield:CreateWindow({
 local MainTab = Window:CreateTab("Main", 4483362458)
 local SavesTab = Window:CreateTab("Saves", 4483362458)
 
--- Refresh daftar saves
+-- Refresh UI
 local function refreshSavesUI()
-    -- Hapus semua elemen lama di tab Saves
     for _, element in ipairs(SavesTab.Elements) do
         if element.Instance and element.Instance.Destroy then
             element.Instance:Destroy()
@@ -64,14 +103,13 @@ local function refreshSavesUI()
     end
     SavesTab.Elements = {}
 
-    -- Bangun ulang dari savedPaths
     for name, path in pairs(savedPaths) do
         local section = SavesTab:CreateSection(name)
 
         SavesTab:CreateButton({
             Name = "Play "..name,
             Callback = function()
-                playPath(savedPaths[name])
+                playPath(path)
             end,
         })
 
@@ -85,11 +123,6 @@ local function refreshSavesUI()
                     savedPaths[name] = nil
                     saveToFile()
                     refreshSavesUI()
-                    Rayfield:Notify({
-                        Title = "Renamed",
-                        Content = name.." → "..newName,
-                        Duration = 3
-                    })
                 end
             end,
         })
@@ -100,11 +133,6 @@ local function refreshSavesUI()
                 savedPaths[name] = nil
                 saveToFile()
                 refreshSavesUI()
-                Rayfield:Notify({
-                    Title = "Deleted",
-                    Content = name.." dihapus",
-                    Duration = 3
-                })
             end,
         })
     end
@@ -119,7 +147,7 @@ MainTab:CreateButton({
             recordedPath = {}
             Rayfield:Notify({
                 Title = "Recording",
-                Content = "Mulai merekam posisi...",
+                Content = "Mulai merekam...",
                 Duration = 3
             })
         else
@@ -158,18 +186,18 @@ MainTab:CreateButton({
     Callback = function()
         if #recordedPath == 0 then return end
         local saveName = "Record_"..os.time()
-        savedPaths[saveName] = table.clone(recordedPath) -- clone biar aman
+        savedPaths[saveName] = table.clone(recordedPath)
         saveToFile()
         refreshSavesUI()
         Rayfield:Notify({
             Title = "Saved",
             Content = "Path tersimpan: "..saveName,
-            Duration = 4
+            Duration = 3
         })
     end,
 })
 
--- Rekam posisi setiap 0.5 detik
+-- Rekam posisi tiap 0.5 detik
 task.spawn(function()
     while true do
         task.wait(0.5)
@@ -179,5 +207,5 @@ task.spawn(function()
     end
 end)
 
--- Bangun ulang daftar saves saat start
+-- Build ulang UI dari file
 refreshSavesUI()
