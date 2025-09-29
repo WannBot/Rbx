@@ -11,6 +11,15 @@ player.CharacterAdded:Connect(function(char)
     character = char
     humanoid = char:WaitForChild("Humanoid")
     root = char:WaitForChild("HumanoidRootPart")
+
+    -- Rebind listener jump setiap respawn
+    humanoid.StateChanged:Connect(function(_, newState)
+        if newState == Enum.HumanoidStateType.Jumping then
+            if recording and root then
+                table.insert(recordedPath, {pos=root.Position, jump=true})
+            end
+        end
+    end)
 end)
 
 -- Data
@@ -44,7 +53,7 @@ MainTab:CreateButton({
             recordedPath = {}
             Rayfield:Notify({Title="Recording", Content="Mulai merekam...", Duration=3})
         else
-            Rayfield:Notify({Title="Stopped", Content="Rekaman selesai ("..#recordedPath.." titik)", Duration=3})
+            Rayfield:Notify({Title="Stopped", Content="Rekaman selesai ("..#recordedPath.." step)", Duration=3})
         end
     end
 })
@@ -63,15 +72,21 @@ MainTab:CreateSlider({
     Callback=function(v) speedMultiplier=v end
 })
 
--- Loop record posisi + loncat
+-- Loop record posisi normal (jalan)
 task.spawn(function()
     while true do
         task.wait(0.5)
-        if recording and root and humanoid then
-            table.insert(recordedPath, {
-                pos = root.Position,
-                jump = (humanoid:GetState() == Enum.HumanoidStateType.Jumping)
-            })
+        if recording and root then
+            table.insert(recordedPath, {pos=root.Position, jump=false})
+        end
+    end
+end)
+
+-- Listener jump untuk pertama kali load karakter
+humanoid.StateChanged:Connect(function(_, newState)
+    if newState == Enum.HumanoidStateType.Jumping then
+        if recording and root then
+            table.insert(recordedPath, {pos=root.Position, jump=true})
         end
     end
 end)
