@@ -118,9 +118,17 @@ local function playPath()
                 if step.type == "move" then
                     local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
                     hum:MoveTo(target)
+
+                    local reached = false
+                    local startTime = tick()
+                    -- tunggu sampai nyampe ATAU timeout 3 detik
                     repeat
                         task.wait(0.05)
-                    until not playing or (hrp.Position - target).Magnitude < 2
+                        if (hrp.Position - target).Magnitude < 5 then -- toleransi lebih besar
+                            reached = true
+                        end
+                    until not playing or reached or (tick() - startTime > 3)
+                    
                 elseif step.type == "jump" then
                     hum:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
