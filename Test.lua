@@ -1,88 +1,75 @@
--- Rayfield UI
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+-- === Load Rayfield ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Window = Rayfield:CreateWindow({
+    Name = "Debug Menu",
+    LoadingTitle = "Init",
+    LoadingSubtitle = "GodMode Rayfield",
+    KeySystem = false,
+})
+local Tab = Window:CreateTab("Main", 4483362458)
 
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local root = character:WaitForChild("HumanoidRootPart")
+-- === State ===
+local godMode = false
+local hum, hrp
+local ff
 
--- Update kalau respawn
-player.CharacterAdded:Connect(function(char)
-    character = char
-    humanoid = char:WaitForChild("Humanoid")
-    root = char:WaitForChild("HumanoidRootPart")
+-- === Helper ===
+local function bindChar()
+    local char = player.Character or player.CharacterAdded:Wait()
+    hum = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
 
-    -- Pasang listener Jumping tiap respawn
-    humanoid.Jumping:Connect(function(active)
-        if recording and active and root then
-            table.insert(recordedPath, {pos=root.Position, jump=true})
-        end
-    end)
-end)
-
--- Data
-local recording = false
-local recordedPath = {}
-local speedMultiplier = 1.0
-
--- Playback
-local function playPath(path)
-    if not humanoid or #path == 0 then return end
-    humanoid.WalkSpeed = 16 * speedMultiplier
-    for _,step in ipairs(path) do
-        if step.jump then
-            humanoid.Jump = true
-        end
-        humanoid:MoveTo(step.pos)
-        humanoid.MoveToFinished:Wait()
+    -- invisible forcefield
+    if not ff or not ff.Parent then
+        ff = Instance.new("ForceField")
+        ff.Visible = false
+        ff.Parent = char
     end
-    humanoid.WalkSpeed = 16
+
+    -- lock health awal
+    hum.MaxHealth = math.huge
+    hum.Health = hum.MaxHealth
 end
 
--- UI
-local Window = Rayfield:CreateWindow({Name="Auto Walk Test"})
-local MainTab = Window:CreateTab("Main")
+-- === GodMode loop ===
+RunService.Heartbeat:Connect(function()
+    if godMode and hum then
+        -- kunci darah full
+        hum.MaxHealth = math.huge
+        hum.Health = hum.MaxHealth
 
-MainTab:CreateButton({
-    Name="Start / Stop Record",
-    Callback=function()
-        recording = not recording
-        if recording then
-            recordedPath = {}
-            Rayfield:Notify({Title="Recording", Content="Mulai merekam...", Duration=3})
-        else
-            Rayfield:Notify({Title="Stopped", Content="Rekaman selesai ("..#recordedPath.." step)", Duration=3})
-        end
-    end
-})
-
-MainTab:CreateButton({
-    Name="Play Record",
-    Callback=function() playPath(recordedPath) end
-})
-
-MainTab:CreateSlider({
-    Name="Speed",
-    Range={0.5,3},
-    Increment=0.1,
-    Suffix="x",
-    CurrentValue=1,
-    Callback=function(v) speedMultiplier=v end
-})
-
--- Loop record posisi normal (jalan)
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if recording and root then
-            table.insert(recordedPath, {pos=root.Position, jump=false})
-        end
+        -- cegah state berbahaya
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
     end
 end)
 
--- Listener Jumping untuk karakter pertama kali
-humanoid.Jumping:Connect(function(active)
-    if recording and active and root then
-        table.insert(recordedPath, {pos=root.Position, jump=true})
+-- === UI Toggle ===
+Tab:CreateToggle({
+    Name = "GodMode (ForceField + MaxHealth)",
+    CurrentValue = false,
+    Callback = function(v)
+        godMode = v
+        if godMode then
+            bindChar()
+        else
+            if ff then
+                ff:Destroy()
+                ff = nil
+            end
+        end
+    end
+})
+
+-- rebind saat respawn
+player.CharacterAdded:Connect(function()
+    if godMode then
+        task.wait(0.1)
+        bindChar()
     end
 end)
