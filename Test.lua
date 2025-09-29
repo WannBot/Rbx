@@ -70,7 +70,7 @@ local function stopRecord()
     print("[RealRecord] Stop. Frames:", #pathData)
 end
 
--- === Play Path (Replay real gerakan + speed control) ===
+-- === Play Path ===
 local function playPath()
     if #pathData == 0 then
         warn("[RealRecord] Tidak ada data record!")
@@ -133,12 +133,36 @@ Tab:CreateButton({
 
 Tab:CreateSlider({
     Name = "Replay Speed",
-    Range = {0.5, 3}, -- dari 0.5x sampai 3x
+    Range = {0.5, 3}, -- 0.5x sampai 3x
     Increment = 0.1,
     Suffix = "x",
     CurrentValue = 1,
     Callback = function(v)
         playSpeed = v
         print("[RealRecord] Replay speed diatur:", v.."x")
+    end
+})
+
+Tab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {10, 200}, -- normal 16
+    Increment = 1,
+    Suffix = " ws",
+    CurrentValue = 16,
+    Callback = function(v)
+        if hum then hum.WalkSpeed = v end
+        print("[RealRecord] WalkSpeed =", v)
+    end
+})
+
+Tab:CreateSlider({
+    Name = "JumpPower",
+    Range = {10, 300}, -- normal 50
+    Increment = 1,
+    Suffix = " jp",
+    CurrentValue = 50,
+    Callback = function(v)
+        if hum then hum.JumpPower = v end
+        print("[RealRecord] JumpPower =", v)
     end
 })
