@@ -6,9 +6,9 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Path Recorder & Player",
+    Name = "Real Path Recorder",
     LoadingTitle = "Init",
-    LoadingSubtitle = "Record + Smooth Play",
+    LoadingSubtitle = "Record & Replay Real Timing",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Path Tool", 4483362458)
@@ -18,8 +18,8 @@ local hrp, hum
 local recording = false
 local playing = false
 local pathData = {}
-local jumpConn, recordConn
-local minDist = 5 -- default jarak antar titik
+local recordConn, jumpConn
+local lastTick = 0
 
 -- === Helper ===
 local function bindChar()
@@ -30,17 +30,22 @@ end
 bindChar()
 player.CharacterAdded:Connect(bindChar)
 
--- === Record Path ===
+-- === Record (pakai timing asli) ===
 local function startRecord()
     if recording then return end
     recording = true
     pathData = {}
-    print("[PathTool] Recording started...")
+    lastTick = tick()
+    print("[PathTool] Recording started (real timing)...")
 
     recordConn = RunService.Heartbeat:Connect(function()
         if recording and hrp then
+            local now = tick()
+            local delta = now - lastTick
+            lastTick = now
+
             table.insert(pathData, {
-                t = tick(),
+                delay = delta, -- simpan jeda antar frame
                 pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
                 type = "move"
             })
@@ -49,8 +54,12 @@ local function startRecord()
 
     jumpConn = hum.StateChanged:Connect(function(_, new)
         if recording and new == Enum.HumanoidStateType.Jumping then
+            local now = tick()
+            local delta = now - lastTick
+            lastTick = now
+
             table.insert(pathData, {
-                t = tick(),
+                delay = delta,
                 pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
                 type = "jump"
             })
@@ -66,76 +75,30 @@ local function stopRecord()
     print("[PathTool] Recording stopped. Steps:", #pathData)
 end
 
-local function saveRecord()
-    if #pathData == 0 then
-        warn("[PathTool] Tidak ada data untuk disimpan")
-        return
-    end
-    local json = HttpService:JSONEncode(pathData)
-    local filename = "PathRecord_"..os.time()..".json"
-    if writefile then
-        writefile(filename, json)
-        print("[PathTool] Saved to", filename)
-    else
-        warn("[PathTool] Executor tidak mendukung writefile()")
-    end
-end
-
--- === Path Simplifier ===
-local function simplifyPath(data, minDist)
-    local simple = {}
-    local lastPos = nil
-    for _, step in ipairs(data) do
-        if step.type == "move" then
-            local pos = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
-            if not lastPos or (pos - lastPos).Magnitude > minDist then
-                table.insert(simple, step)
-                lastPos = pos
-            end
-        else
-            table.insert(simple, step) -- simpan jump
-        end
-    end
-    return simple
-end
-
--- === Play Path (jalan asli) ===
+-- === Play Path Real ===
 local function playPath()
     if #pathData == 0 then
-        warn("[PathTool] Belum ada data record. Rekam dulu sebelum play!")
+        warn("[PathTool] Belum ada data record!")
         return
     end
     if playing then return end
     playing = true
-    print("[PathTool] Playing path... (steps:", #pathData, ")")
-
-    local data = simplifyPath(pathData, minDist)
+    print("[PathTool] Playing path (real timing)... Steps:", #pathData)
 
     task.spawn(function()
-        for _, step in ipairs(data) do
+        for _, step in ipairs(pathData) do
             if not playing then break end
+            task.wait(step.delay) -- tunggu sesuai jeda rekaman
             if hrp and hum then
                 if step.type == "move" then
-                    local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
-                    hum:MoveTo(target)
-
-                    local reached = false
-                    local startTime = tick()
-                    -- tunggu sampai nyampe ATAU timeout 3 detik
-                    repeat
-                        task.wait(0.05)
-                        if (hrp.Position - target).Magnitude < 5 then -- toleransi lebih besar
-                            reached = true
-                        end
-                    until not playing or reached or (tick() - startTime > 3)
-                    
+                    hum:MoveTo(Vector3.new(step.pos[1], step.pos[2], step.pos[3]))
                 elseif step.type == "jump" then
                     hum:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
             end
         end
         playing = false
-        print("[PathTool] Done playing path.")
+        print("[PathTool] Done playing.")
     end)
 end
 
@@ -157,28 +120,11 @@ Tab:CreateButton({
 })
 
 Tab:CreateButton({
-    Name = "Save to File",
-    Callback = saveRecord
-})
-
-Tab:CreateButton({
-    Name = "Play Last Record (Smooth Walk)",
+    Name = "Play Last Record (Real Timing)",
     Callback = playPath
 })
 
 Tab:CreateButton({
     Name = "Stop Play",
     Callback = stopPlay
-})
-
-Tab:CreateSlider({
-    Name = "Min Distance (Smoothness)",
-    Range = {1, 15},
-    Increment = 1,
-    Suffix = " studs",
-    CurrentValue = 5,
-    Callback = function(v)
-        minDist = v
-        print("[PathTool] minDist diubah ke", v)
-    end
 })
