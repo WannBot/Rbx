@@ -6,21 +6,20 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Path Recorder & Player",
+    Name = "Path Recorder",
     LoadingTitle = "Init",
-    LoadingSubtitle = "Record & Replay Run + Jump",
+    LoadingSubtitle = "Record Run + Jump",
     KeySystem = false,
 })
-local Tab = Window:CreateTab("Path Tool", 4483362458)
+local Tab = Window:CreateTab("Recorder", 4483362458)
 
 -- === State ===
 local hrp, hum
 local recording = false
-local playing = false
 local pathData = {}
 local jumpConn
 
--- === Helper ===
+-- Helper: bind character
 local function bindChar()
     local char = player.Character or player.CharacterAdded:Wait()
     hum = char:WaitForChild("Humanoid")
@@ -29,12 +28,12 @@ end
 bindChar()
 player.CharacterAdded:Connect(bindChar)
 
--- === Record Path ===
+-- Start recording
 local function startRecord()
     if recording then return end
     recording = true
     pathData = {}
-    print("[PathTool] Start recording...")
+    print("[Recorder] Start recording...")
 
     -- record posisi tiap frame
     RunService.Heartbeat:Connect(function()
@@ -47,7 +46,7 @@ local function startRecord()
         end
     end)
 
-    -- record jump
+    -- record event jump
     jumpConn = hum.StateChanged:Connect(function(_, new)
         if recording and new == Enum.HumanoidStateType.Jumping then
             table.insert(pathData, {
@@ -59,16 +58,18 @@ local function startRecord()
     end)
 end
 
+-- Stop recording
 local function stopRecord()
     if not recording then return end
     recording = false
     if jumpConn then jumpConn:Disconnect() jumpConn = nil end
-    print("[PathTool] Recording stopped. Steps:", #pathData)
+    print("[Recorder] Recording stopped. Steps:", #pathData)
 end
 
+-- Save to file
 local function saveRecord()
     if #pathData == 0 then
-        warn("[PathTool] Tidak ada data untuk disimpan")
+        warn("[Recorder] No data to save")
         return
     end
     local json = HttpService:JSONEncode(pathData)
@@ -76,54 +77,10 @@ local function saveRecord()
 
     if writefile then
         writefile(filename, json)
-        print("[PathTool] Saved to", filename)
+        print("[Recorder] Saved to", filename)
     else
-        warn("[PathTool] Executor tidak mendukung writefile()")
+        warn("[Recorder] Executor tidak mendukung writefile()")
     end
-end
-
--- === Play Path ===
-local function loadPath(filename)
-    if not readfile then
-        warn("[PathTool] Executor tidak mendukung readfile()")
-        return nil
-    end
-    if not isfile(filename) then
-        warn("[PathTool] File tidak ditemukan:", filename)
-        return nil
-    end
-    local content = readfile(filename)
-    local data = HttpService:JSONDecode(content)
-    return data
-end
-
-local function playPath(filename)
-    local data = loadPath(filename)
-    if not data then return end
-    if playing then return end
-    playing = true
-    print("[PathTool] Playing path:", filename, "steps:", #data)
-
-    task.spawn(function()
-        for _, step in ipairs(data) do
-            if not playing then break end
-            if hrp and hum then
-                if step.type == "move" then
-                    hrp.CFrame = CFrame.new(Vector3.new(step.pos[1], step.pos[2], step.pos[3]))
-                elseif step.type == "jump" then
-                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-            end
-            task.wait(0.1) -- delay antar step
-        end
-        playing = false
-        print("[PathTool] Done playing path.")
-    end)
-end
-
-local function stopPlay()
-    playing = false
-    print("[PathTool] Play stopped.")
 end
 
 -- === UI ===
@@ -140,18 +97,4 @@ Tab:CreateButton({
 Tab:CreateButton({
     Name = "Save to File",
     Callback = saveRecord
-})
-
-Tab:CreateInput({
-    Name = "Play Path (Masukkan nama file)",
-    PlaceholderText = "contoh: PathRecord_123456.json",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(filename)
-        playPath(filename)
-    end
-})
-
-Tab:CreateButton({
-    Name = "Stop Play",
-    Callback = stopPlay
 })
