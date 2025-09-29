@@ -12,12 +12,10 @@ player.CharacterAdded:Connect(function(char)
     humanoid = char:WaitForChild("Humanoid")
     root = char:WaitForChild("HumanoidRootPart")
 
-    -- Rebind listener jump setiap respawn
-    humanoid.StateChanged:Connect(function(_, newState)
-        if newState == Enum.HumanoidStateType.Jumping then
-            if recording and root then
-                table.insert(recordedPath, {pos=root.Position, jump=true})
-            end
+    -- Pasang listener Jumping tiap respawn
+    humanoid.Jumping:Connect(function(active)
+        if recording and active and root then
+            table.insert(recordedPath, {pos=root.Position, jump=true})
         end
     end)
 end)
@@ -82,11 +80,9 @@ task.spawn(function()
     end
 end)
 
--- Listener jump untuk pertama kali load karakter
-humanoid.StateChanged:Connect(function(_, newState)
-    if newState == Enum.HumanoidStateType.Jumping then
-        if recording and root then
-            table.insert(recordedPath, {pos=root.Position, jump=true})
-        end
+-- Listener Jumping untuk karakter pertama kali
+humanoid.Jumping:Connect(function(active)
+    if recording and active and root then
+        table.insert(recordedPath, {pos=root.Position, jump=true})
     end
 end)
