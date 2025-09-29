@@ -20,6 +20,7 @@ local playing = false
 local pathData = {}
 local recordConn, jumpConn
 local startTime
+local playSpeed = 1 -- default 1x
 
 -- === Helper ===
 local function bindChar()
@@ -43,7 +44,7 @@ local function startRecord()
             table.insert(pathData, {
                 t = tick() - startTime,
                 pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-                vel = hum.MoveDirection.Magnitude, -- cek jalan / diam
+                vel = hum.MoveDirection.Magnitude,
                 type = "move"
             })
         end
@@ -69,7 +70,7 @@ local function stopRecord()
     print("[RealRecord] Stop. Frames:", #pathData)
 end
 
--- === Play Path (Replay real gerakan) ===
+-- === Play Path (Replay real gerakan + speed control) ===
 local function playPath()
     if #pathData == 0 then
         warn("[RealRecord] Tidak ada data record!")
@@ -77,18 +78,17 @@ local function playPath()
     end
     if playing then return end
     playing = true
-    print("[RealRecord] Playing... steps:", #pathData)
+    print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
 
     task.spawn(function()
         local playStart = tick()
         local i = 1
         while playing and i <= #pathData do
             local step = pathData[i]
-            local elapsed = tick() - playStart
+            local elapsed = (tick() - playStart) * playSpeed
 
             if elapsed >= step.t then
                 if step.type == "move" then
-                    -- gerakkan dengan MoveTo (biar natural)
                     local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
                     hum:MoveTo(target)
                 elseif step.type == "jump" then
@@ -106,7 +106,7 @@ end
 
 local function stopPlay()
     playing = false
-    hum:Move(Vector3.new(0,0,0))
+    if hum then hum:Move(Vector3.new(0,0,0)) end
     print("[RealRecord] Play stopped.")
 end
 
@@ -129,4 +129,16 @@ Tab:CreateButton({
 Tab:CreateButton({
     Name = "Stop Play",
     Callback = stopPlay
+})
+
+Tab:CreateSlider({
+    Name = "Replay Speed",
+    Range = {0.5, 3}, -- dari 0.5x sampai 3x
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Callback = function(v)
+        playSpeed = v
+        print("[RealRecord] Replay speed diatur:", v.."x")
+    end
 })
