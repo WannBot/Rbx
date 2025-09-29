@@ -1,103 +1,170 @@
+-- Auto Walk Recorder GUI dengan Save/Load (untuk project pribadi)
 local Players = game:GetService("Players")
-local PathfindingService = game:GetService("PathfindingService")
-
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local root = character:WaitForChild("HumanoidRootPart")
 
--- GUI Toggle
+-- Data
+local recordedPath = {}
+local recording = false
+local playback = false
+local speedMultiplier = 1.0
+
+-- GUI
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-local Button = Instance.new("TextButton")
-Button.Size = UDim2.new(0,180,0,40)
-Button.Position = UDim2.new(0.05,0,0.8,0)
-Button.BackgroundColor3 = Color3.fromRGB(40,40,40)
-Button.TextColor3 = Color3.fromRGB(255,255,255)
-Button.Text = "Auto Walk: OFF"
-Button.Parent = ScreenGui
 
--- Status
-local autoWalk = false
-local currentIndex = 1
+local Frame = Instance.new("Frame")
+Frame.Size = UDim2.new(0,260,0,170)
+Frame.Position = UDim2.new(0.05,0,0.7,0)
+Frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Frame.Active = true
+Frame.Draggable = true -- bisa di-drag
+Frame.Parent = ScreenGui
 
--- >>> Daftar koordinat tujuan <<<
-local daftarTujuan = {
-	Vector3.new(-32, 406, 637),
-	Vector3.new(-24, 422, 637),
-	Vector3.new(-15, 440, 638),
-	Vector3.new(-16, 445, 625),
-	Vector3.new(-16, 449, 610),
-	Vector3.new(-16, 452, 603),
-}
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,0,30)
+Title.Text = "Auto Walk Recorder"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.BackgroundColor3 = Color3.fromRGB(45,45,45)
+Title.Parent = Frame
 
--- Parameter agen
-local PATH_PARAMS = {
-	AgentRadius = 2,
-	AgentHeight = 5,
-	AgentCanJump = true,
-	AgentMaxSlope = 45,
-}
+-- Tombol
+local recordBtn = Instance.new("TextButton")
+recordBtn.Text = "Start Record"
+recordBtn.Size = UDim2.new(0.5,-5,0,30)
+recordBtn.Position = UDim2.new(0,5,0,40)
+recordBtn.Parent = Frame
 
--- Hitung path
-local function computePath(fromPos, toPos)
-	local path = PathfindingService:CreatePath(PATH_PARAMS)
-	path:ComputeAsync(fromPos, toPos)
-	return path
-end
+local playBtn = Instance.new("TextButton")
+playBtn.Text = "Play"
+playBtn.Size = UDim2.new(0.5,-5,0,30)
+playBtn.Position = UDim2.new(0.5,5,0,40)
+playBtn.Parent = Frame
 
--- Ikuti path
-local function followPath(path)
-	if path.Status ~= Enum.PathStatus.Success then
-		return false
-	end
+local saveBtn = Instance.new("TextButton")
+saveBtn.Text = "Save"
+saveBtn.Size = UDim2.new(0.5,-5,0,30)
+saveBtn.Position = UDim2.new(0,5,0,80)
+saveBtn.Parent = Frame
 
-	local waypoints = path:GetWaypoints()
-	for _, wp in ipairs(waypoints) do
-		if not autoWalk then break end
+local loadBtn = Instance.new("TextButton")
+loadBtn.Text = "Load"
+loadBtn.Size = UDim2.new(0.5,-5,0,30)
+loadBtn.Position = UDim2.new(0.5,5,0,80)
+loadBtn.Parent = Frame
 
-		if wp.Action == Enum.PathWaypointAction.Jump then
-			humanoid.Jump = true
-		elseif wp.Action == Enum.PathWaypointAction.Custom then
-			-- >>> Ini lewat PathfindingLink <<<
-			print("Melewati PathfindingLink ke:", wp.Position)
-			-- Bisa pakai teleport, atau climbing manual
-			humanoid:MoveTo(wp.Position)
-			-- contoh: lompat supaya naik
-			humanoid.Jump = true
-		end
+local speedBox = Instance.new("TextBox")
+speedBox.Text = "1.0"
+speedBox.PlaceholderText = "Speed"
+speedBox.Size = UDim2.new(0.5,-5,0,30)
+speedBox.Position = UDim2.new(0,5,0,120)
+speedBox.Parent = Frame
 
-		humanoid:MoveTo(wp.Position)
-		humanoid.MoveToFinished:Wait()
-	end
-	return true
-end
+local clearBtn = Instance.new("TextButton")
+clearBtn.Text = "Clear"
+clearBtn.Size = UDim2.new(0.5,-5,0,30)
+clearBtn.Position = UDim2.new(0.5,5,0,120)
+clearBtn.Parent = Frame
 
--- Toggle
-Button.MouseButton1Click:Connect(function()
-	autoWalk = not autoWalk
-	if autoWalk then
-		Button.Text = "Auto Walk: ON"
-		currentIndex = 1
-	else
-		Button.Text = "Auto Walk: OFF"
-	end
+-- Minimize
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Text = "-"
+minimizeBtn.Size = UDim2.new(0,30,0,30)
+minimizeBtn.Position = UDim2.new(1,-35,0,0)
+minimizeBtn.Parent = Frame
+
+-- State
+local minimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    for _, child in ipairs(Frame:GetChildren()) do
+        if child ~= Title and child ~= minimizeBtn then
+            child.Visible = not minimized
+        end
+    end
+    Frame.Size = minimized and UDim2.new(0,260,0,30) or UDim2.new(0,260,0,170)
 end)
 
--- Loop
+-- Record
+local function startRecord()
+    recordedPath = {}
+    recording = true
+    recordBtn.Text = "Stop Record"
+end
+
+local function stopRecord()
+    recording = false
+    recordBtn.Text = "Start Record"
+    print("Saved "..#recordedPath.." points")
+end
+
+-- Playback
+local function playPath()
+    if #recordedPath == 0 then return end
+    playback = true
+    for _, pos in ipairs(recordedPath) do
+        if not playback then break end
+        humanoid:MoveTo(pos)
+        humanoid.MoveToFinished:Wait()
+    end
+    playback = false
+end
+
+-- Save/Load (versi dalam game → pakai Instance Value)
+local function savePath()
+    local storage = Instance.new("Folder")
+    storage.Name = "SavedPath"
+    storage.Parent = game.ReplicatedStorage
+
+    for i,pos in ipairs(recordedPath) do
+        local val = Instance.new("Vector3Value")
+        val.Name = "Point"..i
+        val.Value = pos
+        val.Parent = storage
+    end
+    print("Path saved to ReplicatedStorage")
+end
+
+local function loadPath()
+    local storage = game.ReplicatedStorage:FindFirstChild("SavedPath")
+    if storage then
+        recordedPath = {}
+        for _,v in ipairs(storage:GetChildren()) do
+            table.insert(recordedPath, v.Value)
+        end
+        print("Loaded "..#recordedPath.." points")
+    end
+end
+
+-- Tombol handler
+recordBtn.MouseButton1Click:Connect(function()
+    if not recording then startRecord() else stopRecord() end
+end)
+
+playBtn.MouseButton1Click:Connect(function()
+    if not playback then
+        speedMultiplier = tonumber(speedBox.Text) or 1.0
+        humanoid.WalkSpeed = 16 * speedMultiplier
+        playPath()
+        humanoid.WalkSpeed = 16
+    end
+end)
+
+clearBtn.MouseButton1Click:Connect(function()
+    recordedPath = {}
+    print("Cleared path")
+end)
+
+saveBtn.MouseButton1Click:Connect(savePath)
+loadBtn.MouseButton1Click:Connect(loadPath)
+
+-- Rekam posisi tiap detik
 task.spawn(function()
-	while task.wait(0.5) do
-		if autoWalk and daftarTujuan[currentIndex] then
-			local path = computePath(root.Position, daftarTujuan[currentIndex])
-			local ok = followPath(path)
-			if ok then
-				currentIndex += 1
-				if currentIndex > #daftarTujuan then
-					autoWalk = false
-					Button.Text = "Auto Walk: OFF"
-				end
-			else
-				task.wait(0.5)
-			end
-		end
-	end
+    while true do
+        task.wait(1)
+        if recording and root then
+            table.insert(recordedPath, root.Position)
+        end
+    end
 end)
