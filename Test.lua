@@ -17,197 +17,167 @@ local root = character:WaitForChild("HumanoidRootPart")
 
 -- Load file jika ada
 if isfile(fileName) then
-   local data = readfile(fileName)
-   savedPaths = HttpService:JSONDecode(data)
+    local data = readfile(fileName)
+    savedPaths = HttpService:JSONDecode(data)
 end
 
 -- Fungsi simpan file
 local function saveToFile()
-   writefile(fileName, HttpService:JSONEncode(savedPaths))
+    writefile(fileName, HttpService:JSONEncode(savedPaths))
+end
+
+-- Fungsi main playback
+local function playPath(path)
+    if not path or #path == 0 then return end
+    humanoid.WalkSpeed = 16 * speedMultiplier
+    for _,pos in ipairs(path) do
+        -- konversi dari JSON table ke Vector3
+        if typeof(pos) == "table" and pos.x and pos.y and pos.z then
+            pos = Vector3.new(pos.x, pos.y, pos.z)
+        end
+        humanoid:MoveTo(pos)
+        humanoid.MoveToFinished:Wait()
+    end
+    humanoid.WalkSpeed = 16
 end
 
 -- Window
 local Window = Rayfield:CreateWindow({
-   Name = "Auto Walk Recorder",
-   LoadingTitle = "Recorder",
-   LoadingSubtitle = "Rayfield UI",
-   ConfigurationSaving = {
-      Enabled = false,
-   }
+    Name = "Auto Walk Recorder",
+    LoadingTitle = "Recorder",
+    LoadingSubtitle = "Rayfield UI",
+    ConfigurationSaving = {
+        Enabled = false,
+    }
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
 local SavesTab = Window:CreateTab("Saves", 4483362458)
 
--- Rekam tombol
+-- Refresh daftar saves
+local function refreshSavesUI()
+    -- Hapus semua elemen lama di tab Saves
+    for _, element in ipairs(SavesTab.Elements) do
+        if element.Instance and element.Instance.Destroy then
+            element.Instance:Destroy()
+        end
+    end
+    SavesTab.Elements = {}
+
+    -- Bangun ulang dari savedPaths
+    for name, path in pairs(savedPaths) do
+        local section = SavesTab:CreateSection(name)
+
+        SavesTab:CreateButton({
+            Name = "Play "..name,
+            Callback = function()
+                playPath(savedPaths[name])
+            end,
+        })
+
+        SavesTab:CreateInput({
+            Name = "Rename "..name,
+            PlaceholderText = "Nama baru",
+            RemoveTextAfterFocusLost = false,
+            Callback = function(newName)
+                if newName ~= "" and savedPaths[name] then
+                    savedPaths[newName] = savedPaths[name]
+                    savedPaths[name] = nil
+                    saveToFile()
+                    refreshSavesUI()
+                    Rayfield:Notify({
+                        Title = "Renamed",
+                        Content = name.." → "..newName,
+                        Duration = 3
+                    })
+                end
+            end,
+        })
+
+        SavesTab:CreateButton({
+            Name = "Delete "..name,
+            Callback = function()
+                savedPaths[name] = nil
+                saveToFile()
+                refreshSavesUI()
+                Rayfield:Notify({
+                    Title = "Deleted",
+                    Content = name.." dihapus",
+                    Duration = 3
+                })
+            end,
+        })
+    end
+end
+
+-- Tombol Record
 MainTab:CreateButton({
-   Name = "Start/Stop Record",
-   Callback = function()
-      recording = not recording
-      if recording then
-         recordedPath = {}
-         Rayfield:Notify({
-            Title = "Recording",
-            Content = "Mulai merekam posisi...",
-            Duration = 3
-         })
-      else
-         Rayfield:Notify({
-            Title = "Stopped",
-            Content = "Rekaman selesai ("..#recordedPath.." titik)",
-            Duration = 3
-         })
-      end
-   end,
-})
-
--- Playback
-MainTab:CreateButton({
-   Name = "Play Record",
-   Callback = function()
-      if #recordedPath == 0 then return end
-      playback = true
-      humanoid.WalkSpeed = 16 * speedMultiplier
-      for _,pos in ipairs(recordedPath) do
-         if not playback then break end
-         humanoid:MoveTo(pos)
-         humanoid.MoveToFinished:Wait()
-      end
-      humanoid.WalkSpeed = 16
-      playback = false
-   end,
-})
-
--- Speed
-MainTab:CreateSlider({
-   Name = "Speed",
-   Range = {0.5, 3},
-   Increment = 0.1,
-   Suffix = "x",
-   CurrentValue = 1,
-   Callback = function(Value)
-      speedMultiplier = Value
-   end,
-})
-
--- Save record
-MainTab:CreateButton({
-   Name = "Save Current Path",
-   Callback = function()
-      if #recordedPath == 0 then return end
-      local saveName = "Record_"..os.time()
-      savedPaths[saveName] = recordedPath
-      saveToFile()
-
-      local section = SavesTab:CreateSection(saveName)
-
-      -- Play
-      SavesTab:CreateButton({
-         Name = "Play "..saveName,
-         Callback = function()
-            local path = savedPaths[saveName]
-            humanoid.WalkSpeed = 16 * speedMultiplier
-            for _,pos in ipairs(path) do
-               humanoid:MoveTo(pos)
-               humanoid.MoveToFinished:Wait()
-            end
-            humanoid.WalkSpeed = 16
-         end,
-      })
-
-      -- Rename
-      SavesTab:CreateInput({
-         Name = "Rename "..saveName,
-         PlaceholderText = "Nama baru",
-         RemoveTextAfterFocusLost = false,
-         Callback = function(newName)
-            if newName ~= "" and savedPaths[saveName] then
-               savedPaths[newName] = savedPaths[saveName]
-               savedPaths[saveName] = nil
-               saveToFile()
-               section:Set(newName)
-               Rayfield:Notify({
-                  Title = "Renamed",
-                  Content = saveName.." → "..newName,
-                  Duration = 3
-               })
-            end
-         end,
-      })
-
-      -- Delete
-      SavesTab:CreateButton({
-         Name = "Delete "..saveName,
-         Callback = function()
-            savedPaths[saveName] = nil
-            saveToFile()
+    Name = "Start/Stop Record",
+    Callback = function()
+        recording = not recording
+        if recording then
+            recordedPath = {}
             Rayfield:Notify({
-               Title = "Deleted",
-               Content = saveName.." dihapus",
-               Duration = 3
+                Title = "Recording",
+                Content = "Mulai merekam posisi...",
+                Duration = 3
             })
-            -- Tidak ada API Rayfield untuk hapus UI, jadi biarkan tombol lama tidak aktif
-         end,
-      })
-
-      Rayfield:Notify({
-         Title = "Saved",
-         Content = "Path tersimpan: "..saveName,
-         Duration = 4
-      })
-   end,
+        else
+            Rayfield:Notify({
+                Title = "Stopped",
+                Content = "Rekaman selesai ("..#recordedPath.." titik)",
+                Duration = 3
+            })
+        end
+    end,
 })
 
--- Rekam posisi tiap 0.5 detik
+-- Playback record terakhir
+MainTab:CreateButton({
+    Name = "Play Record",
+    Callback = function()
+        playPath(recordedPath)
+    end,
+})
+
+-- Speed slider
+MainTab:CreateSlider({
+    Name = "Speed",
+    Range = {0.5, 3},
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Callback = function(Value)
+        speedMultiplier = Value
+    end,
+})
+
+-- Save record permanen
+MainTab:CreateButton({
+    Name = "Save Current Path",
+    Callback = function()
+        if #recordedPath == 0 then return end
+        local saveName = "Record_"..os.time()
+        savedPaths[saveName] = table.clone(recordedPath) -- clone biar aman
+        saveToFile()
+        refreshSavesUI()
+        Rayfield:Notify({
+            Title = "Saved",
+            Content = "Path tersimpan: "..saveName,
+            Duration = 4
+        })
+    end,
+})
+
+-- Rekam posisi setiap 0.5 detik
 task.spawn(function()
-   while true do
-      task.wait(0.5)
-      if recording and root then
-         table.insert(recordedPath, root.Position)
-      end
-   end
+    while true do
+        task.wait(0.5)
+        if recording and root then
+            table.insert(recordedPath, root.Position)
+        end
+    end
 end)
 
--- Muat semua save dari file saat start
-for name,path in pairs(savedPaths) do
-   local section = SavesTab:CreateSection(name)
-
-   SavesTab:CreateButton({
-      Name = "Play "..name,
-      Callback = function()
-         humanoid.WalkSpeed = 16 * speedMultiplier
-         for _,pos in ipairs(path) do
-            humanoid:MoveTo(pos)
-            humanoid.MoveToFinished:Wait()
-         end
-         humanoid.WalkSpeed = 16
-      end,
-   })
-
-   SavesTab:CreateInput({
-      Name = "Rename "..name,
-      PlaceholderText = "Nama baru",
-      RemoveTextAfterFocusLost = false,
-      Callback = function(newName)
-         if newName ~= "" and savedPaths[name] then
-            savedPaths[newName] = savedPaths[name]
-            savedPaths[name] = nil
-            saveToFile()
-            section:Set(newName)
-         end
-      end,
-   })
-
-   SavesTab:CreateButton({
-      Name = "Delete "..name,
-      Callback = function()
-         savedPaths[name] = nil
-         saveToFile()
-         Rayfield:Notify({
-            Title = "Deleted",
-            Content = name.." dihapus",
-            Duration = 3
-         })
-      end,
-   })
-end
+-- Bangun ulang daftar saves saat start
+refreshSavesUI()
