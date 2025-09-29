@@ -18,12 +18,15 @@ local recording = false
 local recordedPath = {}
 local speedMultiplier = 1.0
 
--- Fungsi playback
+-- Playback
 local function playPath(path)
     if not humanoid or #path == 0 then return end
     humanoid.WalkSpeed = 16 * speedMultiplier
-    for _,pos in ipairs(path) do
-        humanoid:MoveTo(pos)
+    for _,step in ipairs(path) do
+        if step.jump then
+            humanoid.Jump = true
+        end
+        humanoid:MoveTo(step.pos)
         humanoid.MoveToFinished:Wait()
     end
     humanoid.WalkSpeed = 16
@@ -60,12 +63,15 @@ MainTab:CreateSlider({
     Callback=function(v) speedMultiplier=v end
 })
 
--- Loop record posisi
+-- Loop record posisi + loncat
 task.spawn(function()
     while true do
         task.wait(0.5)
-        if recording and root then
-            table.insert(recordedPath, root.Position)
+        if recording and root and humanoid then
+            table.insert(recordedPath, {
+                pos = root.Position,
+                jump = (humanoid:GetState() == Enum.HumanoidStateType.Jumping)
+            })
         end
     end
 end)
