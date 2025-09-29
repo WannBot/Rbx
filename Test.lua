@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
-local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 
 -- === Rayfield UI ===
@@ -9,7 +8,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Path Recorder & Player",
     LoadingTitle = "Init",
-    LoadingSubtitle = "Record & Replay Smooth",
+    LoadingSubtitle = "Record & Replay (Natural Walk)",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Path Tool", 4483362458)
@@ -68,7 +67,7 @@ local function stopRecord()
     print("[PathTool] Recording stopped. Steps:", #pathData)
 end
 
--- === Play Path (Smooth / lerp) ===
+-- === Play Path (jalan asli) ===
 local function playPath()
     if #pathData == 0 then
         warn("[PathTool] Belum ada data record. Rekam dulu sebelum play!")
@@ -76,25 +75,16 @@ local function playPath()
     end
     if playing then return end
     playing = true
-    print("[PathTool] Playing recorded path (smooth)... Steps:", #pathData)
+    print("[PathTool] Playing recorded path (jalan asli)... Steps:", #pathData)
 
     task.spawn(function()
-        for i, step in ipairs(pathData) do
+        for _, step in ipairs(pathData) do
             if not playing then break end
             if hrp and hum then
                 if step.type == "move" then
-                    local targetPos = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
-                    local distance = (hrp.Position - targetPos).Magnitude
-                    local speed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
-                    local travelTime = distance / speed
-
-                    local tween = TweenService:Create(
-                        hrp,
-                        TweenInfo.new(travelTime, Enum.EasingStyle.Linear),
-                        {CFrame = CFrame.new(targetPos)}
-                    )
-                    tween:Play()
-                    tween.Completed:Wait()
+                    local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
+                    hum:MoveTo(target)
+                    hum.MoveToFinished:Wait() -- tunggu sampai nyampe
                 elseif step.type == "jump" then
                     hum:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
@@ -107,6 +97,7 @@ end
 
 local function stopPlay()
     playing = false
+    hum:Move(Vector3.new(0,0,0)) -- stop gerak
     print("[PathTool] Play stopped.")
 end
 
@@ -122,7 +113,7 @@ Tab:CreateButton({
 })
 
 Tab:CreateButton({
-    Name = "Play Last Record (Smooth)",
+    Name = "Play Last Record (Jalan Asli)",
     Callback = playPath
 })
 
