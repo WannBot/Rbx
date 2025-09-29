@@ -6,9 +6,9 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Real Path Recorder",
+    Name = "Real Recorder",
     LoadingTitle = "Init",
-    LoadingSubtitle = "Record & Replay (Speed Control)",
+    LoadingSubtitle = "Record & Replay Real",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Path Tool", 4483362458)
@@ -19,8 +19,7 @@ local recording = false
 local playing = false
 local pathData = {}
 local recordConn, jumpConn
-local lastTick = 0
-local playSpeed = 1 -- default 1x speed
+local startTime
 
 -- === Helper ===
 local function bindChar()
@@ -31,23 +30,20 @@ end
 bindChar()
 player.CharacterAdded:Connect(bindChar)
 
--- === Record (pakai timing asli) ===
+-- === Record Path ===
 local function startRecord()
     if recording then return end
     recording = true
     pathData = {}
-    lastTick = tick()
-    print("[PathTool] Recording started (real timing)...")
+    startTime = tick()
+    print("[RealRecord] Start recording...")
 
     recordConn = RunService.Heartbeat:Connect(function()
         if recording and hrp then
-            local now = tick()
-            local delta = now - lastTick
-            lastTick = now
-
             table.insert(pathData, {
-                delay = delta,
+                t = tick() - startTime,
                 pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+                vel = hum.MoveDirection.Magnitude, -- cek jalan / diam
                 type = "move"
             })
         end
@@ -55,13 +51,10 @@ local function startRecord()
 
     jumpConn = hum.StateChanged:Connect(function(_, new)
         if recording and new == Enum.HumanoidStateType.Jumping then
-            local now = tick()
-            local delta = now - lastTick
-            lastTick = now
-
             table.insert(pathData, {
-                delay = delta,
+                t = tick() - startTime,
                 pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+                vel = 0,
                 type = "jump"
             })
         end
@@ -73,44 +66,48 @@ local function stopRecord()
     recording = false
     if recordConn then recordConn:Disconnect() recordConn = nil end
     if jumpConn then jumpConn:Disconnect() jumpConn = nil end
-    print("[PathTool] Recording stopped. Steps:", #pathData)
+    print("[RealRecord] Stop. Frames:", #pathData)
 end
 
--- === Play Path (pakai timing asli + speed slider) ===
+-- === Play Path (Replay real gerakan) ===
 local function playPath()
     if #pathData == 0 then
-        warn("[PathTool] Belum ada data record!")
+        warn("[RealRecord] Tidak ada data record!")
         return
     end
     if playing then return end
     playing = true
-    print("[PathTool] Playing path... Steps:", #pathData, " Speed:", playSpeed, "x")
+    print("[RealRecord] Playing... steps:", #pathData)
 
     task.spawn(function()
-        for i, step in ipairs(pathData) do
-            if not playing then break end
-            task.wait(step.delay / playSpeed) -- kontrol kecepatan
-            if hrp and hum then
+        local playStart = tick()
+        local i = 1
+        while playing and i <= #pathData do
+            local step = pathData[i]
+            local elapsed = tick() - playStart
+
+            if elapsed >= step.t then
                 if step.type == "move" then
-                    -- arahkan avatar ke posisi step berikut
+                    -- gerakkan dengan MoveTo (biar natural)
                     local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
-                    local dir = (target - hrp.Position).Unit
-                    hum:Move(dir)
+                    hum:MoveTo(target)
                 elseif step.type == "jump" then
                     hum:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
+                i = i + 1
+            else
+                task.wait(0.01)
             end
         end
         playing = false
-        hum:Move(Vector3.zero) -- berhenti setelah selesai
-        print("[PathTool] Done playing.")
+        print("[RealRecord] Done.")
     end)
 end
 
 local function stopPlay()
     playing = false
-    if hum then hum:Move(Vector3.zero) end
-    print("[PathTool] Play stopped.")
+    hum:Move(Vector3.new(0,0,0))
+    print("[RealRecord] Play stopped.")
 end
 
 -- === UI ===
@@ -125,23 +122,11 @@ Tab:CreateButton({
 })
 
 Tab:CreateButton({
-    Name = "Play Last Record (Real Timing)",
+    Name = "Play Last Record",
     Callback = playPath
 })
 
 Tab:CreateButton({
     Name = "Stop Play",
     Callback = stopPlay
-})
-
-Tab:CreateSlider({
-    Name = "Playback Speed",
-    Range = {0.5, 3}, -- bisa set 0.5x sampai 3x
-    Increment = 0.1,
-    Suffix = "x",
-    CurrentValue = 1,
-    Callback = function(v)
-        playSpeed = v
-        print("[PathTool] Playback speed diubah ke", v, "x")
-    end
 })
