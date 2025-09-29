@@ -1,9 +1,12 @@
+-- Rayfield UI
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local HttpService = game:GetService("HttpService")
 
+-- Konfigurasi file
 local DIR_NAME = "AutoWalk"
 local FILE_PATH = DIR_NAME.."/AutoWalkPaths.json"
 
+-- Data
 local recordedPath = {}
 local savedPaths = {}
 local recording = false
@@ -12,7 +15,7 @@ local speedMultiplier = 1.0
 local player = game.Players.LocalPlayer
 local character, humanoid, root
 
--- Bind ulang tiap respawn
+-- Bind ulang setiap respawn
 local function bindCharacter(char)
     character = char
     humanoid = char:WaitForChild("Humanoid")
@@ -33,7 +36,9 @@ end
 local function decodePath(tbl)
     local out = {}
     for _,step in ipairs(tbl) do
-        table.insert(out, {pos=Vector3.new(step.x, step.y, step.z), jump=step.jump})
+        if step.x and step.y and step.z then
+            table.insert(out, {pos=Vector3.new(step.x, step.y, step.z), jump=step.jump})
+        end
     end
     return out
 end
@@ -60,21 +65,23 @@ loadFromFile()
 
 -- Playback
 local function playPath(path)
-    if not humanoid then return end
+    if not humanoid or not path or #path == 0 then return end
+    local oldSpeed = humanoid.WalkSpeed
     humanoid.WalkSpeed = 16 * speedMultiplier
     for _,step in ipairs(path) do
         if step.jump then humanoid.Jump = true end
         humanoid:MoveTo(step.pos)
         humanoid.MoveToFinished:Wait()
     end
-    humanoid.WalkSpeed = 16
+    humanoid.WalkSpeed = oldSpeed
 end
 
--- UI
+-- ============== RAYFIELD UI ==============
 local Window = Rayfield:CreateWindow({Name="Auto Walk Recorder"})
 local MainTab = Window:CreateTab("Main")
 local SavesTab = Window:CreateTab("Saves")
 
+-- Manajemen UI Saves
 local SavesUI = {}
 local function clearSavesUI()
     for _,elem in ipairs(SavesUI) do
@@ -84,7 +91,9 @@ local function clearSavesUI()
     end
     table.clear(SavesUI)
 end
-local function pushUI(obj) if obj then table.insert(SavesUI,obj) end end
+local function pushUI(obj)
+    if obj then table.insert(SavesUI, obj) end
+end
 
 local function refreshSavesUI()
     clearSavesUI()
@@ -95,6 +104,7 @@ local function refreshSavesUI()
             Name="Play "..name,
             Callback=function() playPath(path) end
         }))
+
         pushUI(SavesTab:CreateInput({
             Name="Rename "..name,
             PlaceholderText="Nama baru",
@@ -108,6 +118,7 @@ local function refreshSavesUI()
                 end
             end
         }))
+
         pushUI(SavesTab:CreateButton({
             Name="Delete "..name,
             Callback=function()
@@ -119,21 +130,34 @@ local function refreshSavesUI()
     end
 end
 
+-- Tombol utama
 MainTab:CreateButton({
-    Name="Start/Stop Record",
+    Name="Start / Stop Record",
     Callback=function()
         recording=not recording
-        if recording then recordedPath={} end
+        if recording then
+            recordedPath={}
+            Rayfield:Notify({Title="Recording", Content="Mulai merekam...", Duration=3})
+        else
+            Rayfield:Notify({Title="Stopped", Content="Rekaman berhenti ("..#recordedPath.." titik)", Duration=3})
+        end
     end
 })
+
 MainTab:CreateButton({
-    Name="Play Record",
+    Name="Play Record (Terakhir)",
     Callback=function() playPath(recordedPath) end
 })
+
 MainTab:CreateSlider({
-    Name="Speed",Range={0.5,3},Increment=0.1,CurrentValue=1,
+    Name="Speed",
+    Range={0.5,3},
+    Increment=0.1,
+    Suffix="x",
+    CurrentValue=1,
     Callback=function(v) speedMultiplier=v end
 })
+
 MainTab:CreateButton({
     Name="Save Current Path",
     Callback=function()
@@ -142,20 +166,22 @@ MainTab:CreateButton({
         savedPaths[saveName]=table.clone(recordedPath)
         saveToFile()
         refreshSavesUI()
+        Rayfield:Notify({Title="Saved", Content="Path tersimpan: "..saveName, Duration=3})
     end
 })
 
--- Loop rekam
+-- Rekam posisi + jump tiap 0.5 detik
 task.spawn(function()
     while true do
         task.wait(0.5)
         if recording and root and humanoid then
             table.insert(recordedPath,{
                 pos=root.Position,
-                jump=humanoid:GetState()==Enum.HumanoidStateType.Jumping
+                jump=(humanoid:GetState()==Enum.HumanoidStateType.Jumping)
             })
         end
     end
 end)
 
+-- Bangun ulang daftar save dari file
 refreshSavesUI()
