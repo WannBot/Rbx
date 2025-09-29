@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 
 -- === Rayfield UI ===
@@ -8,7 +9,7 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
     Name = "Path Recorder & Player",
     LoadingTitle = "Init",
-    LoadingSubtitle = "Record & Replay",
+    LoadingSubtitle = "Record & Replay Smooth",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Path Tool", 4483362458)
@@ -67,23 +68,7 @@ local function stopRecord()
     print("[PathTool] Recording stopped. Steps:", #pathData)
 end
 
-local function saveRecord()
-    if #pathData == 0 then
-        warn("[PathTool] Tidak ada data untuk disimpan")
-        return
-    end
-    local json = HttpService:JSONEncode(pathData)
-    local filename = "PathRecord_"..os.time()..".json"
-
-    if writefile then
-        writefile(filename, json)
-        print("[PathTool] Saved to", filename)
-    else
-        warn("[PathTool] Executor tidak mendukung writefile()")
-    end
-end
-
--- === Play Path (langsung data terakhir) ===
+-- === Play Path (Smooth / lerp) ===
 local function playPath()
     if #pathData == 0 then
         warn("[PathTool] Belum ada data record. Rekam dulu sebelum play!")
@@ -91,19 +76,29 @@ local function playPath()
     end
     if playing then return end
     playing = true
-    print("[PathTool] Playing recorded path... Steps:", #pathData)
+    print("[PathTool] Playing recorded path (smooth)... Steps:", #pathData)
 
     task.spawn(function()
-        for _, step in ipairs(pathData) do
+        for i, step in ipairs(pathData) do
             if not playing then break end
             if hrp and hum then
                 if step.type == "move" then
-                    hrp.CFrame = CFrame.new(Vector3.new(step.pos[1], step.pos[2], step.pos[3]))
+                    local targetPos = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
+                    local distance = (hrp.Position - targetPos).Magnitude
+                    local speed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
+                    local travelTime = distance / speed
+
+                    local tween = TweenService:Create(
+                        hrp,
+                        TweenInfo.new(travelTime, Enum.EasingStyle.Linear),
+                        {CFrame = CFrame.new(targetPos)}
+                    )
+                    tween:Play()
+                    tween.Completed:Wait()
                 elseif step.type == "jump" then
                     hum:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
             end
-            task.wait(0.1)
         end
         playing = false
         print("[PathTool] Done playing path.")
@@ -127,12 +122,7 @@ Tab:CreateButton({
 })
 
 Tab:CreateButton({
-    Name = "Save to File",
-    Callback = saveRecord
-})
-
-Tab:CreateButton({
-    Name = "Play Last Record",
+    Name = "Play Last Record (Smooth)",
     Callback = playPath
 })
 
