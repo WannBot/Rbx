@@ -6,9 +6,9 @@ local player = Players.LocalPlayer
 -- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-    Name = "Smooth Path Recorder",
+    Name = "Real Path Recorder",
     LoadingTitle = "Init",
-    LoadingSubtitle = "Record & Replay Natural Run",
+    LoadingSubtitle = "Record & Replay (Speed Control)",
     KeySystem = false,
 })
 local Tab = Window:CreateTab("Path Tool", 4483362458)
@@ -20,8 +20,7 @@ local playing = false
 local pathData = {}
 local recordConn, jumpConn
 local lastTick = 0
-local lastPos = nil
-local minDist = 5 -- simpan titik tiap >= 5 studs
+local playSpeed = 1 -- default 1x speed
 
 -- === Helper ===
 local function bindChar()
@@ -32,29 +31,25 @@ end
 bindChar()
 player.CharacterAdded:Connect(bindChar)
 
--- === Record (optimized, no spam) ===
+-- === Record (pakai timing asli) ===
 local function startRecord()
     if recording then return end
     recording = true
     pathData = {}
     lastTick = tick()
-    lastPos = hrp and hrp.Position or nil
-    print("[PathTool] Recording started...")
+    print("[PathTool] Recording started (real timing)...")
 
     recordConn = RunService.Heartbeat:Connect(function()
         if recording and hrp then
             local now = tick()
             local delta = now - lastTick
-            local pos = hrp.Position
-            if not lastPos or (pos - lastPos).Magnitude >= minDist then
-                lastTick = now
-                lastPos = pos
-                table.insert(pathData, {
-                    delay = delta,
-                    pos = {pos.X, pos.Y, pos.Z},
-                    type = "move"
-                })
-            end
+            lastTick = now
+
+            table.insert(pathData, {
+                delay = delta,
+                pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+                type = "move"
+            })
         end
     end)
 
@@ -63,6 +58,7 @@ local function startRecord()
             local now = tick()
             local delta = now - lastTick
             lastTick = now
+
             table.insert(pathData, {
                 delay = delta,
                 pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
@@ -80,7 +76,7 @@ local function stopRecord()
     print("[PathTool] Recording stopped. Steps:", #pathData)
 end
 
--- === Play Path (smooth natural run) ===
+-- === Play Path (pakai timing asli + speed slider) ===
 local function playPath()
     if #pathData == 0 then
         warn("[PathTool] Belum ada data record!")
@@ -88,28 +84,32 @@ local function playPath()
     end
     if playing then return end
     playing = true
-    print("[PathTool] Playing path (smooth)... Steps:", #pathData)
+    print("[PathTool] Playing path... Steps:", #pathData, " Speed:", playSpeed, "x")
 
     task.spawn(function()
-        for _, step in ipairs(pathData) do
+        for i, step in ipairs(pathData) do
             if not playing then break end
-            task.wait(step.delay) -- ikut jeda rekaman
+            task.wait(step.delay / playSpeed) -- kontrol kecepatan
             if hrp and hum then
                 if step.type == "move" then
-                    hum:MoveTo(Vector3.new(step.pos[1], step.pos[2], step.pos[3]))
+                    -- arahkan avatar ke posisi step berikut
+                    local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
+                    local dir = (target - hrp.Position).Unit
+                    hum:Move(dir)
                 elseif step.type == "jump" then
                     hum:ChangeState(Enum.HumanoidStateType.Jumping)
                 end
             end
         end
         playing = false
-        print("[PathTool] Done playing path.")
+        hum:Move(Vector3.zero) -- berhenti setelah selesai
+        print("[PathTool] Done playing.")
     end)
 end
 
 local function stopPlay()
     playing = false
-    if hum then hum:Move(Vector3.new(0,0,0)) end
+    if hum then hum:Move(Vector3.zero) end
     print("[PathTool] Play stopped.")
 end
 
@@ -125,7 +125,7 @@ Tab:CreateButton({
 })
 
 Tab:CreateButton({
-    Name = "Play Last Record (Smooth Run)",
+    Name = "Play Last Record (Real Timing)",
     Callback = playPath
 })
 
@@ -135,13 +135,13 @@ Tab:CreateButton({
 })
 
 Tab:CreateSlider({
-    Name = "Min Distance Save",
-    Range = {1, 15},
-    Increment = 1,
-    Suffix = " studs",
-    CurrentValue = 5,
+    Name = "Playback Speed",
+    Range = {0.5, 3}, -- bisa set 0.5x sampai 3x
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
     Callback = function(v)
-        minDist = v
-        print("[PathTool] minDist diubah ke", v)
+        playSpeed = v
+        print("[PathTool] Playback speed diubah ke", v, "x")
     end
 })
