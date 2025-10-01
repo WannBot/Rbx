@@ -49,7 +49,6 @@ local function toggleFly(state)
             local moveDir = hum.MoveDirection
             if moveDir.Magnitude > 0 then
                 local forward, right = getCameraBasis()
-                -- treat MoveDirection sebagai input local (X kanan/kiri, Z depan/belakang)
                 local input = Vector3.new(moveDir.X, 0, moveDir.Z)
                 add += (forward * input.Z) + (right * input.X)
             end
@@ -70,45 +69,40 @@ local function toggleFly(state)
     end
 end
 
---// === UI sederhana ===
-local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
-local Frame = Instance.new("Frame", ScreenGui)
-local Toggle = Instance.new("TextButton", Frame)
-local SpeedBtn = Instance.new("TextButton", Frame)
+--// === Fluent UI ===
+local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/source.lua"))()
 
-ScreenGui.ResetOnSpawn = false
-Frame.Size = UDim2.new(0, 220, 0, 120)
-Frame.Position = UDim2.new(0.5, -110, 0.2, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Frame.Active = true
-Frame.Draggable = true
+local Window = Fluent:CreateWindow({
+    Title = "Fly Control",
+    SubTitle = "Fluent UI",
+    TabWidth = 120,
+    Size = UDim2.fromOffset(430, 300),
+    Acrylic = true, -- blur background
+    Theme = "Dark"
+})
 
-Toggle.Size = UDim2.new(1, -20, 0, 40)
-Toggle.Position = UDim2.new(0, 10, 0, 10)
-Toggle.Text = "Fly: OFF"
-Toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-Toggle.Font = Enum.Font.SourceSansBold
-Toggle.TextSize = 20
+local Tab = Window:AddTab({ Title = "Main", Icon = "airplane" })
 
-local flyOn = false
-Toggle.MouseButton1Click:Connect(function()
-    flyOn = not flyOn
-    Toggle.Text = flyOn and "Fly: ON" or "Fly: OFF"
-    toggleFly(flyOn)
+-- Toggle Fly
+Tab:AddToggle("FlyToggle", { Title = "Enable Fly", Default = false }, function(state)
+    toggleFly(state)
 end)
 
--- Speed cycle button
-SpeedBtn.Size = UDim2.new(1, -20, 0, 40)
-SpeedBtn.Position = UDim2.new(0, 10, 0, 60)
-SpeedBtn.Text = "Speed: x"..speed
-SpeedBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-SpeedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedBtn.Font = Enum.Font.SourceSansBold
-SpeedBtn.TextSize = 18
-
-SpeedBtn.MouseButton1Click:Connect(function()
-    speed = speed + 1
-    if speed > 5 then speed = 1 end
-    SpeedBtn.Text = "Speed: x"..speed
+-- Slider Speed
+Tab:AddSlider("FlySpeed", {
+    Title = "Fly Speed",
+    Description = "Adjust movement speed",
+    Default = 2,
+    Min = 1,
+    Max = 10,
+    Rounding = 1,
+}, function(val)
+    speed = val
 end)
+
+-- Notification Example
+Fluent:Notify({
+    Title = "Fly Script",
+    Content = "Loaded with Fluent UI",
+    Duration = 5
+})
