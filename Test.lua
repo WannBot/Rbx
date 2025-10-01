@@ -1,98 +1,96 @@
--- Load Rayfield (official)
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- Services
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 
--- Buat Window
+-- Load Rayfield
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+-- Window Login
 local Window = Rayfield:CreateWindow({
-   Name = "Rayfield Example Window",
-   LoadingTitle = "Rayfield Interface Suite",
-   LoadingSubtitle = "by Sirius",
-   Theme = "Default",
-   ShowText = "Rayfield",
-   ToggleUIKeybind = "K",
+    Name = "Key Login",
+    LoadingTitle = "Botresi Key",
+    LoadingSubtitle = "Login menggunakan key",
+    ConfigurationSaving = {
+        Enabled = false
+    }
 })
 
--- Buat Tab Settings
-local SettingsTab = Window:CreateTab("Settings", 4483362458)
+-- Tab Auth
+local AuthTab = Window:CreateTab("Auth", 0)
+AuthTab:CreateSection("Login Key")
 
--- Mapping Theme Name ke Identifier
-local Themes = {
-   ["Default"] = "Default",
-   ["Amber Glow"] = "AmberGlow",
-   ["Amethyst"] = "Amethyst",
-   ["Bloom"] = "Bloom",
-   ["Dark Blue"] = "DarkBlue",
-   ["Green"] = "Green",
-   ["Light"] = "Light",
-   ["Ocean"] = "Ocean",
-   ["Serenity"] = "Serenity"
-}
-
--- Dropdown Pilihan Theme
-SettingsTab:CreateDropdown({
-   Name = "Theme",
-   Options = {"Default","Amber Glow","Amethyst","Bloom","Dark Blue","Green","Light","Ocean","Serenity"},
-   CurrentOption = "Default",
-   Flag = "ThemeDropdown",
-   Callback = function(option)
-      local themeId = Themes[option]
-      if themeId then
-         Window:ModifyTheme(themeId)
-         Rayfield:Notify({
-            Title = "Theme Changed",
-            Content = "Now using theme: " .. option,
-            Duration = 6.5,
-            Image = 4483362458
-         })
-      end
-   end
+-- Input Key
+local inputKey = AuthTab:CreateInput({
+    Name = "Masukkan Key",
+    PlaceholderText = "paste key di sini",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(text) end
 })
 
--- Button: Hide UI
-SettingsTab:CreateButton({
-   Name = "Hide UI",
-   Callback = function()
-      Rayfield:SetVisibility(false)
-      Rayfield:Notify({
-         Title = "UI Hidden",
-         Content = "Rayfield interface is now hidden",
-         Duration = 4,
-         Image = 4483362458
-      })
-   end
-})
+-- Status Label
+local statusLabel = AuthTab:CreateLabel("Status: idle")
 
--- Button: Show UI
-SettingsTab:CreateButton({
-   Name = "Show UI",
-   Callback = function()
-      Rayfield:SetVisibility(true)
-      Rayfield:Notify({
-         Title = "UI Shown",
-         Content = "Rayfield interface is now visible",
-         Duration = 4,
-         Image = 4483362458
-      })
-   end
-})
+-- Fungsi validasi key
+local function validateKey(key)
+    local endpoint = "https://botresi.xyz/keygen/api/validate.php" -- API kamu
+    local body = "key=" .. HttpService:UrlEncode(key)
+    local headers = { ["Content-Type"] = "application/x-www-form-urlencoded" }
 
--- Button: Check UI Visible?
-SettingsTab:CreateButton({
-   Name = "Check UI Visible?",
-   Callback = function()
-      local visible = Rayfield:IsVisible()
-      Rayfield:Notify({
-         Title = "UI Visibility",
-         Content = visible and "UI is currently visible" or "UI is currently hidden",
-         Duration = 4,
-         Image = 4483362458
-      })
-   end
-})
+    local ok, resp = pcall(function()
+        return HttpService:PostAsync(endpoint, body, Enum.HttpContentType.ApplicationUrlEncoded, false, headers)
+    end)
 
--- Button: Destroy UI
-SettingsTab:CreateButton({
-   Name = "Destroy UI",
-   Callback = function()
-      Rayfield:Destroy()
-   end
+    if not ok then
+        return false, "http_error: " .. tostring(resp)
+    end
+
+    local decodeOk, data = pcall(function()
+        return HttpService:JSONDecode(resp) end)
+
+    if not decodeOk then
+        return false, "invalid_response"
+    end
+
+    if data.valid then
+        return true, data
+    else
+        return false, data.reason or "invalid"
+    end
+end
+
+-- Tombol Login
+AuthTab:CreateButton({
+    Name = "Login dengan Key",
+    Callback = function()
+        local key = inputKey.CurrentValue
+        if not key or key == "" then
+            statusLabel:Set("Status: Masukkan key terlebih dahulu")
+            return
+        end
+
+        statusLabel:Set("Status: Memeriksa key...")
+        local ok, res = validateKey(key)
+        if ok then
+            statusLabel:Set("Status: ✅ Key valid — " .. tostring(res.duration or ""))
+
+            -- Unlock Tab baru setelah login sukses
+            local MainTab = Window:CreateTab("Main", 4483362458)
+            MainTab:CreateLabel("Selamat datang! Fitur aktif ✔")
+
+            Rayfield:Notify({
+                Title = "Login Sukses",
+                Content = "Key valid! Fitur sudah terbuka",
+                Duration = 6,
+                Image = 4483362458
+            })
+        else
+            statusLabel:Set("Status: ❌ Key tidak valid (" .. tostring(res) .. ")")
+            Rayfield:Notify({
+                Title = "Login Gagal",
+                Content = "Key salah atau expired",
+                Duration = 5,
+                Image = 4483362458
+            })
+        end
+    end
 })
