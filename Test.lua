@@ -18,7 +18,15 @@ local currentCF = rootPart.CFrame
 local hbConn
 local speed = 2
 
---// Fly toggle
+-- fungsi ambil basis kamera (hanya yaw)
+local function getCameraBasis()
+    local camCF = Camera.CFrame
+    local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
+    local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
+    return forward, right
+end
+
+-- toggle fly
 local function toggleFly(state)
     Flying = state
     if Flying then
@@ -37,17 +45,16 @@ local function toggleFly(state)
             if UIS:IsKeyDown(Enum.KeyCode.E) then add += Vector3.new(0,1,0) end
             if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Vector3.new(0,1,0) end
 
-            -- Mobile joystick (Thumbstick Dinamis default)
+            -- Mobile joystick (Thumbstick Dinamis)
             local moveDir = hum.MoveDirection
             if moveDir.Magnitude > 0 then
-                -- ambil basis kamera (horizontal only)
-                local camCF = Camera.CFrame
-                local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
-                local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
-                add += (forward * moveDir.Z) + (right * moveDir.X)
+                local forward, right = getCameraBasis()
+                -- treat MoveDirection sebagai input local (X kanan/kiri, Z depan/belakang)
+                local input = Vector3.new(moveDir.X, 0, moveDir.Z)
+                add += (forward * input.Z) + (right * input.X)
             end
 
-            -- apply fly
+            -- apply
             rootPart.AssemblyLinearVelocity = Vector3.zero
             rootPart.AssemblyAngularVelocity = Vector3.zero
 
