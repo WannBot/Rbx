@@ -6,25 +6,26 @@ local Camera = workspace.CurrentCamera
 
 --// Player
 local Player = Players.LocalPlayer
-local char = Player.Character or Player.CharacterAdded:Wait()
-local rootPart: BasePart = char:WaitForChild("HumanoidRootPart")
-local hum: Humanoid = char:WaitForChild("Humanoid")
+local function getChar()
+    local c = Player.Character or Player.CharacterAdded:Wait()
+    return c, c:WaitForChild("HumanoidRootPart"), c:WaitForChild("Humanoid")
+end
+local char, rootPart, hum = getChar()
 
 --// Fly state
 local Flying = false
 local currentCF = rootPart.CFrame
+local hbConn
 
---// Fly toggle function
 local function toggleFly(state)
 	Flying = state
-	
 	if Flying then
 		hum.PlatformStand = true
-		RunService.Heartbeat:Connect(function()
+		if hbConn then hbConn:Disconnect() end
+		hbConn = RunService.Heartbeat:Connect(function()
 			if not Flying then return end
 
 			local add = Vector3.new(0,0,0)
-
 			if UIS:IsKeyDown(Enum.KeyCode.W) then add += Camera.CFrame.LookVector end
 			if UIS:IsKeyDown(Enum.KeyCode.S) then add -= Camera.CFrame.LookVector end
 			if UIS:IsKeyDown(Enum.KeyCode.D) then add += Camera.CFrame.RightVector end
@@ -42,16 +43,34 @@ local function toggleFly(state)
 			)
 		end)
 	else
+		if hbConn then hbConn:Disconnect() hbConn = nil end
 		hum.PlatformStand = false
 	end
 end
 
---// === UI: Union Library ===
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnionFairy/UILibs/main/UnionLibrary.lua"))()
+--// === Minimal UI (Union-like) ===
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local Frame = Instance.new("Frame", ScreenGui)
+local Toggle = Instance.new("TextButton", Frame)
 
-local Window = Library:CreateWindow("Delta UI")
-local Tab = Window:CreateTab("Fly Tool")
+ScreenGui.ResetOnSpawn = false
+Frame.Size = UDim2.new(0, 200, 0, 80)
+Frame.Position = UDim2.new(0.5, -100, 0.2, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.Active = true
+Frame.Draggable = true
 
-Tab:CreateToggle("Fly Mode", function(val)
-	toggleFly(val)
+Toggle.Size = UDim2.new(1, -20, 0, 40)
+Toggle.Position = UDim2.new(0, 10, 0.5, -20)
+Toggle.Text = "Fly: OFF"
+Toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+Toggle.Font = Enum.Font.SourceSansBold
+Toggle.TextSize = 20
+
+local flyOn = false
+Toggle.MouseButton1Click:Connect(function()
+	flyOn = not flyOn
+	Toggle.Text = flyOn and "Fly: ON" or "Fly: OFF"
+	toggleFly(flyOn)
 end)
