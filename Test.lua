@@ -1,88 +1,104 @@
 --// Services
+local UIS = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 
 --// Player
 local Player = Players.LocalPlayer
-local Char = Player.Character or Player.CharacterAdded:Wait()
-local Hum = Char:WaitForChild("Humanoid")
-local Root = Char:WaitForChild("HumanoidRootPart")
+local function getChar()
+    local c = Player.Character or Player.CharacterAdded:Wait()
+    return c, c:WaitForChild("HumanoidRootPart"), c:WaitForChild("Humanoid")
+end
+local char, rootPart, hum = getChar()
 
 --// Fly state
 local Flying = false
-local FlySpeed = 50
-local BodyVelocity
-local HBConn
+local currentCF = rootPart.CFrame
+local hbConn
+local speed = 2 -- default multiplier
 
---// Toggle Fly
+--// Fly toggle
 local function toggleFly(state)
-	Flying = state
-	if Flying then
-		if not BodyVelocity then
-			BodyVelocity = Instance.new("BodyVelocity")
-			BodyVelocity.Velocity = Vector3.new(0,0,0)
-			BodyVelocity.MaxForce = Vector3.new(9e9,9e9,9e9)
-			BodyVelocity.P = 10000
-			BodyVelocity.Parent = Root
-		end
+    Flying = state
+    if Flying then
+        hum.PlatformStand = true
+        if hbConn then hbConn:Disconnect() end
+        hbConn = RunService.Heartbeat:Connect(function()
+            if not Flying then return end
 
-		if HBConn then HBConn:Disconnect() end
-		HBConn = RunService.Heartbeat:Connect(function()
-			if not Flying then return end
+            local add = Vector3.new(0,0,0)
 
-			local moveDir = Vector3.new(0,0,0)
+            -- PC controls
+            if UIS:IsKeyDown(Enum.KeyCode.W) then add += Camera.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then add -= Camera.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then add += Camera.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then add -= Camera.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.E) then add += Camera.CFrame.UpVector end
+            if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Camera.CFrame.UpVector end
 
-			-- PC Keyboard
-			if UIS:IsKeyDown(Enum.KeyCode.W) then moveDir += Camera.CFrame.LookVector end
-			if UIS:IsKeyDown(Enum.KeyCode.S) then moveDir -= Camera.CFrame.LookVector end
-			if UIS:IsKeyDown(Enum.KeyCode.D) then moveDir += Camera.CFrame.RightVector end
-			if UIS:IsKeyDown(Enum.KeyCode.A) then moveDir -= Camera.CFrame.RightVector end
-			if UIS:IsKeyDown(Enum.KeyCode.E) then moveDir += Camera.CFrame.UpVector end
-			if UIS:IsKeyDown(Enum.KeyCode.Q) then moveDir -= Camera.CFrame.UpVector end
+            -- Mobile joystick control (arah sesuai kamera)
+            local moveDir = hum.MoveDirection
+            if moveDir.Magnitude > 0 then
+                local relative = Camera.CFrame:VectorToWorldSpace(moveDir)
+                add += relative
+            end
 
-			-- Mobile Joystick
-			if Hum.MoveDirection.Magnitude > 0 then
-				local camRelative = Camera.CFrame:VectorToWorldSpace(Hum.MoveDirection)
-				moveDir += camRelative
-			end
+            -- Apply fly movement
+            rootPart.AssemblyLinearVelocity = Vector3.zero
+            rootPart.AssemblyAngularVelocity = Vector3.zero
 
-			if moveDir.Magnitude > 0 then
-				BodyVelocity.Velocity = moveDir.Unit * FlySpeed
-			else
-				BodyVelocity.Velocity = Vector3.zero
-			end
-		end)
-	else
-		if HBConn then HBConn:Disconnect() HBConn = nil end
-		if BodyVelocity then BodyVelocity:Destroy() BodyVelocity = nil end
-	end
+            currentCF += add * speed
+            rootPart.CFrame = CFrame.lookAt(
+                currentCF.Position,
+                currentCF.Position + (Camera.CFrame.LookVector * 2)
+            )
+        end)
+    else
+        if hbConn then hbConn:Disconnect() hbConn = nil end
+        hum.PlatformStand = false
+    end
 end
 
---// === Minimal UI (Button On/Off) ===
+--// === Minimal UI ===
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 local Frame = Instance.new("Frame", ScreenGui)
 local Toggle = Instance.new("TextButton", Frame)
+local SpeedBtn = Instance.new("TextButton", Frame)
 
 ScreenGui.ResetOnSpawn = false
-Frame.Size = UDim2.new(0, 200, 0, 80)
-Frame.Position = UDim2.new(0.5, -100, 0.2, 0)
-Frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+Frame.Size = UDim2.new(0, 220, 0, 120)
+Frame.Position = UDim2.new(0.5, -110, 0.2, 0)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.Active = true
 Frame.Draggable = true
 
 Toggle.Size = UDim2.new(1, -20, 0, 40)
-Toggle.Position = UDim2.new(0, 10, 0.5, -20)
+Toggle.Position = UDim2.new(0, 10, 0, 10)
 Toggle.Text = "Fly: OFF"
-Toggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
-Toggle.TextColor3 = Color3.fromRGB(255,255,255)
+Toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 Toggle.Font = Enum.Font.SourceSansBold
 Toggle.TextSize = 20
 
 local flyOn = false
 Toggle.MouseButton1Click:Connect(function()
-	flyOn = not flyOn
-	Toggle.Text = flyOn and "Fly: ON" or "Fly: OFF"
-	toggleFly(flyOn)
+    flyOn = not flyOn
+    Toggle.Text = flyOn and "Fly: ON" or "Fly: OFF"
+    toggleFly(flyOn)
+end)
+
+-- Speed control (cycle button)
+SpeedBtn.Size = UDim2.new(1, -20, 0, 40)
+SpeedBtn.Position = UDim2.new(0, 10, 0, 60)
+SpeedBtn.Text = "Speed: x"..speed
+SpeedBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+SpeedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedBtn.Font = Enum.Font.SourceSansBold
+SpeedBtn.TextSize = 18
+
+SpeedBtn.MouseButton1Click:Connect(function()
+    speed = speed + 1
+    if speed > 5 then speed = 1 end
+    SpeedBtn.Text = "Speed: x"..speed
 end)
