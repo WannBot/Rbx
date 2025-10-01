@@ -1,97 +1,47 @@
---// Load FluentPlus
+-- Load FluentPlus
 local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/discoart/FluentPlus/refs/heads/main/release.lua", true))()
 
---// Window
+-- Buat Window utama
 local Window = Fluent:CreateWindow({
-    Title = "Fly Control",
-    SubTitle = "FluentPlus UI",
-    Theme = "Dark",
+    Title = "My Game UI",
+    SubTitle = "FluentPlus Example",
+    Theme = "Dark",          -- "Dark" / "Light"
     Size = UDim2.fromOffset(450, 300),
 })
 
-local Tab = Window:AddTab({ Title = "Main", Icon = "airplane" })
+-- Tambah Tab
+local MainTab = Window:AddTab({ Title = "Main", Icon = "home" })
+local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "settings" })
 
---// Fly Logic
-local UIS = game:GetService("UserInputService")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Camera = workspace.CurrentCamera
-local Player = Players.LocalPlayer
-local char, root, hum
+-- Tambah elemen di Main Tab
+MainTab:AddToggle("ExampleToggle", { Title = "Example Toggle", Default = false }, function(state)
+    print("Toggle State:", state)
+end)
 
-local function bindChar()
-    char = Player.Character or Player.CharacterAdded:Wait()
-    root = char:WaitForChild("HumanoidRootPart")
-    hum = char:WaitForChild("Humanoid")
-end
-bindChar()
-Player.CharacterAdded:Connect(bindChar)
-
-local Flying, hbConn = false, nil
-local currentCF = root.CFrame
-local speed = 2
-
-local function getCameraBasis()
-    local camCF = Camera.CFrame
-    local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
-    local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
-    return forward, right
-end
-
-local function toggleFly(state)
-    Flying = state
-    if Flying then
-        hum.PlatformStand = true
-        if hbConn then hbConn:Disconnect() end
-        hbConn = RunService.Heartbeat:Connect(function()
-            if not Flying then return end
-
-            local add = Vector3.new()
-
-            -- PC keys
-            if UIS:IsKeyDown(Enum.KeyCode.W) then add += Camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then add -= Camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then add += Camera.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then add -= Camera.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.E) then add += Vector3.new(0,1,0) end
-            if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Vector3.new(0,1,0) end
-
-            -- Mobile analog (thumbstick dinamis)
-            local md = hum.MoveDirection
-            if md.Magnitude > 0 then
-                local f, r = getCameraBasis()
-                add += f * md.Z + r * md.X
-            end
-
-            root.AssemblyLinearVelocity = Vector3.zero
-            root.AssemblyAngularVelocity = Vector3.zero
-
-            currentCF += add * speed
-            root.CFrame = CFrame.lookAt(currentCF.Position, currentCF.Position + (Camera.CFrame.LookVector * 2))
-        end)
-    else
-        if hbConn then hbConn:Disconnect() hbConn = nil end
-        hum.PlatformStand = false
+MainTab:AddButton({
+    Title = "Example Button",
+    Description = "Click me!",
+    Callback = function()
+        print("Button clicked!")
     end
-end
+})
 
---// UI Controls
-Tab:AddToggle("FlyToggle", { Title = "Enable Fly", Default = false }, function(v)
-    toggleFly(v)
-end)
-
-Tab:AddSlider("FlySpeed", {
-    Title = "Fly Speed",
-    Default = 2,
+MainTab:AddSlider("ExampleSlider", {
+    Title = "Example Slider",
+    Default = 5,
     Min = 1,
-    Max = 10,
+    Max = 20,
     Rounding = 1,
-}, function(val)
-    speed = val
+}, function(value)
+    print("Slider Value:", value)
 end)
 
+-- Tambah elemen di Settings Tab
+SettingsTab:AddParagraph("Info", "Ini contoh UI pakai FluentPlus. Semua elemen bisa kamu custom.")
+
+-- Contoh notifikasi
 Fluent:Notify({
-    Title = "Fly Script",
-    Content = "FluentPlus UI Loaded ✅",
+    Title = "FluentPlus",
+    Content = "UI berhasil dimuat ✅",
     Duration = 5
 })
