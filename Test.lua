@@ -17,6 +17,7 @@ local Flying = false
 local currentCF = rootPart.CFrame
 local hbConn
 
+--// Fly toggle
 local function toggleFly(state)
 	Flying = state
 	if Flying then
@@ -26,6 +27,8 @@ local function toggleFly(state)
 			if not Flying then return end
 
 			local add = Vector3.new(0,0,0)
+
+			-- PC Keyboard
 			if UIS:IsKeyDown(Enum.KeyCode.W) then add += Camera.CFrame.LookVector end
 			if UIS:IsKeyDown(Enum.KeyCode.S) then add -= Camera.CFrame.LookVector end
 			if UIS:IsKeyDown(Enum.KeyCode.D) then add += Camera.CFrame.RightVector end
@@ -33,6 +36,15 @@ local function toggleFly(state)
 			if UIS:IsKeyDown(Enum.KeyCode.E) then add += Camera.CFrame.UpVector end
 			if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Camera.CFrame.UpVector end
 
+			-- Mobile Joystick (MoveDirection)
+			local moveDir = hum.MoveDirection
+			if moveDir.Magnitude > 0 then
+				-- arah joystick relatif kamera
+				local camRelative = Camera.CFrame:VectorToWorldSpace(moveDir)
+				add += camRelative
+			end
+
+			-- Apply movement
 			rootPart.AssemblyLinearVelocity = Vector3.zero
 			rootPart.AssemblyAngularVelocity = Vector3.zero
 
@@ -48,7 +60,7 @@ local function toggleFly(state)
 	end
 end
 
---// === Minimal UI (Union-like) ===
+--// === Minimal UI ===
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 local Frame = Instance.new("Frame", ScreenGui)
 local Toggle = Instance.new("TextButton", Frame)
