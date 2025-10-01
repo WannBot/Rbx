@@ -1,5 +1,5 @@
--- Load Rayfield
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
+-- Load Rayfield (official)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- Buat Window
 local Window = Rayfield:CreateWindow({
@@ -47,7 +47,7 @@ SettingsTab:CreateDropdown({
    end
 })
 
--- Button: SetVisibility(false)
+-- Button: Hide UI
 SettingsTab:CreateButton({
    Name = "Hide UI",
    Callback = function()
@@ -61,7 +61,7 @@ SettingsTab:CreateButton({
    end
 })
 
--- Button: SetVisibility(true)
+-- Button: Show UI
 SettingsTab:CreateButton({
    Name = "Show UI",
    Callback = function()
@@ -75,7 +75,7 @@ SettingsTab:CreateButton({
    end
 })
 
--- Button: IsVisible()
+-- Button: Check UI Visible?
 SettingsTab:CreateButton({
    Name = "Check UI Visible?",
    Callback = function()
