@@ -1,10 +1,10 @@
---// Services
+-- Services
 local UIS = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Camera = workspace.CurrentCamera
 
---// Player
+-- Player
 local Player = Players.LocalPlayer
 local function getChar()
     local c = Player.Character or Player.CharacterAdded:Wait()
@@ -12,13 +12,13 @@ local function getChar()
 end
 local char, rootPart, hum = getChar()
 
---// State
+-- Fly state
 local Flying = false
 local currentCF = rootPart.CFrame
 local hbConn
 local speed = 2
 
--- fungsi ambil basis kamera (hanya yaw)
+-- get camera basis (horizontal)
 local function getCameraBasis()
     local camCF = Camera.CFrame
     local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
@@ -27,33 +27,32 @@ local function getCameraBasis()
 end
 
 -- toggle fly
-local function toggleFly(state)
-    Flying = state
+local function toggleFly(on)
+    Flying = on
     if Flying then
         hum.PlatformStand = true
         if hbConn then hbConn:Disconnect() end
         hbConn = RunService.Heartbeat:Connect(function()
             if not Flying then return end
 
-            local add = Vector3.new(0,0,0)
+            local add = Vector3.new(0, 0, 0)
 
-            -- PC keyboard
+            -- PC controls
             if UIS:IsKeyDown(Enum.KeyCode.W) then add += Camera.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.S) then add -= Camera.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.D) then add += Camera.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.A) then add -= Camera.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.E) then add += Vector3.new(0,1,0) end
-            if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Vector3.new(0,1,0) end
+            if UIS:IsKeyDown(Enum.KeyCode.E) then add += Vector3.new(0, 1, 0) end
+            if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Vector3.new(0, 1, 0) end
 
-            -- Mobile joystick (Thumbstick Dinamis)
-            local moveDir = hum.MoveDirection
-            if moveDir.Magnitude > 0 then
+            -- Mobile joystick via hum.MoveDirection
+            local md = hum.MoveDirection
+            if md.Magnitude > 0 then
                 local forward, right = getCameraBasis()
-                local input = Vector3.new(moveDir.X, 0, moveDir.Z)
-                add += (forward * input.Z) + (right * input.X)
+                add += forward * md.Z + right * md.X
             end
 
-            -- apply
+            -- reset velocities
             rootPart.AssemblyLinearVelocity = Vector3.zero
             rootPart.AssemblyAngularVelocity = Vector3.zero
 
@@ -69,29 +68,44 @@ local function toggleFly(state)
     end
 end
 
---// === Fluent UI ===
-local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/main/source.lua"))()
+-- Load Fluent
+local ok, Fluent = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+end)
+if not ok or not Fluent then
+    warn("Gagal load Fluent UI library")
+    -- fallback UI minimal
+    local sg = Instance.new("ScreenGui", game.CoreGui)
+    local btn = Instance.new("TextButton", sg)
+    btn.Size = UDim2.new(0, 200, 0, 50)
+    btn.Position = UDim2.new(0.5, -100, 0.2, 0)
+    btn.Text = "Fly: OFF"
+    btn.MouseButton1Click:Connect(function()
+        Flying = not Flying
+        toggleFly(Flying)
+        btn.Text = Flying and "Fly: ON" or "Fly: OFF"
+    end)
+    return
+end
 
+-- Create Fluent UI
 local Window = Fluent:CreateWindow({
-    Title = "Fly Control",
-    SubTitle = "Fluent UI",
-    TabWidth = 120,
-    Size = UDim2.fromOffset(430, 300),
-    Acrylic = true, -- blur background
-    Theme = "Dark"
+    Title = "Fly UI",
+    SubTitle = "Fluent",
+    Theme = "Dark",
+    Width = 300,
+    Height = 150,
 })
 
-local Tab = Window:AddTab({ Title = "Main", Icon = "airplane" })
+local Tab = Window:AddTab("Main")
 
--- Toggle Fly
-Tab:AddToggle("FlyToggle", { Title = "Enable Fly", Default = false }, function(state)
-    toggleFly(state)
+Tab:AddToggle("FlyToggle", { Title = "Enable Fly", Default = false }, function(v)
+    toggleFly(v)
 end)
 
--- Slider Speed
 Tab:AddSlider("FlySpeed", {
-    Title = "Fly Speed",
-    Description = "Adjust movement speed",
+    Title = "Speed",
+    Description = "Fly speed multiplier",
     Default = 2,
     Min = 1,
     Max = 10,
@@ -99,10 +113,3 @@ Tab:AddSlider("FlySpeed", {
 }, function(val)
     speed = val
 end)
-
--- Notification Example
-Fluent:Notify({
-    Title = "Fly Script",
-    Content = "Loaded with Fluent UI",
-    Duration = 5
-})
