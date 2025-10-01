@@ -1,168 +1,57 @@
+--// Services
+local UIS = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- === Rayfield UI ===
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-local Window = Rayfield:CreateWindow({
-    Name = "Real Recorder",
-    LoadingTitle = "Init",
-    LoadingSubtitle = "Record & Replay Real",
-    KeySystem = false,
-})
-local Tab = Window:CreateTab("Path Tool", 4483362458)
+--// Player
+local Player = Players.LocalPlayer
+local char = Player.Character or Player.CharacterAdded:Wait()
+local rootPart: BasePart = char:WaitForChild("HumanoidRootPart")
+local hum: Humanoid = char:WaitForChild("Humanoid")
 
--- === State ===
-local hrp, hum
-local recording = false
-local playing = false
-local pathData = {}
-local recordConn, jumpConn
-local startTime
-local playSpeed = 1 -- default 1x
+--// Fly state
+local Flying = false
+local currentCF = rootPart.CFrame
 
--- === Helper ===
-local function bindChar()
-    local char = player.Character or player.CharacterAdded:Wait()
-    hum = char:WaitForChild("Humanoid")
-    hrp = char:WaitForChild("HumanoidRootPart")
-end
-bindChar()
-player.CharacterAdded:Connect(bindChar)
+--// Fly toggle function
+local function toggleFly(state)
+	Flying = state
+	
+	if Flying then
+		hum.PlatformStand = true
+		RunService.Heartbeat:Connect(function()
+			if not Flying then return end
 
--- === Record Path ===
-local function startRecord()
-    if recording then return end
-    recording = true
-    pathData = {}
-    startTime = tick()
-    print("[RealRecord] Start recording...")
+			local add = Vector3.new(0,0,0)
 
-    recordConn = RunService.Heartbeat:Connect(function()
-        if recording and hrp then
-            table.insert(pathData, {
-                t = tick() - startTime,
-                pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-                vel = hum.MoveDirection.Magnitude,
-                type = "move"
-            })
-        end
-    end)
+			if UIS:IsKeyDown(Enum.KeyCode.W) then add += Camera.CFrame.LookVector end
+			if UIS:IsKeyDown(Enum.KeyCode.S) then add -= Camera.CFrame.LookVector end
+			if UIS:IsKeyDown(Enum.KeyCode.D) then add += Camera.CFrame.RightVector end
+			if UIS:IsKeyDown(Enum.KeyCode.A) then add -= Camera.CFrame.RightVector end
+			if UIS:IsKeyDown(Enum.KeyCode.E) then add += Camera.CFrame.UpVector end
+			if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Camera.CFrame.UpVector end
 
-    jumpConn = hum.StateChanged:Connect(function(_, new)
-        if recording and new == Enum.HumanoidStateType.Jumping then
-            table.insert(pathData, {
-                t = tick() - startTime,
-                pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-                vel = 0,
-                type = "jump"
-            })
-        end
-    end)
+			rootPart.AssemblyLinearVelocity = Vector3.zero
+			rootPart.AssemblyAngularVelocity = Vector3.zero
+
+			currentCF += add
+			rootPart.CFrame = CFrame.lookAt(
+				currentCF.Position,
+				currentCF.Position + (Camera.CFrame.LookVector * 2)
+			)
+		end)
+	else
+		hum.PlatformStand = false
+	end
 end
 
-local function stopRecord()
-    if not recording then return end
-    recording = false
-    if recordConn then recordConn:Disconnect() recordConn = nil end
-    if jumpConn then jumpConn:Disconnect() jumpConn = nil end
-    print("[RealRecord] Stop. Frames:", #pathData)
-end
+--// === UI: Union Library ===
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/UnionFairy/UILibs/main/UnionLibrary.lua"))()
 
--- === Play Path ===
-local function playPath()
-    if #pathData == 0 then
-        warn("[RealRecord] Tidak ada data record!")
-        return
-    end
-    if playing then return end
-    playing = true
-    print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
+local Window = Library:CreateWindow("Delta UI")
+local Tab = Window:CreateTab("Fly Tool")
 
-    task.spawn(function()
-        local playStart = tick()
-        local i = 1
-        while playing and i <= #pathData do
-            local step = pathData[i]
-            local elapsed = (tick() - playStart) * playSpeed
-
-            if elapsed >= step.t then
-                if step.type == "move" then
-                    local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
-                    hum:MoveTo(target)
-                elseif step.type == "jump" then
-                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-                i = i + 1
-            else
-                task.wait(0.01)
-            end
-        end
-        playing = false
-        print("[RealRecord] Done.")
-    end)
-end
-
-local function stopPlay()
-    playing = false
-    if hum then hum:Move(Vector3.new(0,0,0)) end
-    print("[RealRecord] Play stopped.")
-end
-
--- === UI ===
-Tab:CreateButton({
-    Name = "Start Record",
-    Callback = startRecord
-})
-
-Tab:CreateButton({
-    Name = "Stop Record",
-    Callback = stopRecord
-})
-
-Tab:CreateButton({
-    Name = "Play Last Record",
-    Callback = playPath
-})
-
-Tab:CreateButton({
-    Name = "Stop Play",
-    Callback = stopPlay
-})
-
-Tab:CreateSlider({
-    Name = "Replay Speed",
-    Range = {0.5, 3}, -- 0.5x sampai 3x
-    Increment = 0.1,
-    Suffix = "x",
-    CurrentValue = 1,
-    Callback = function(v)
-        playSpeed = v
-        print("[RealRecord] Replay speed diatur:", v.."x")
-    end
-})
-
-Tab:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {10, 200}, -- normal 16
-    Increment = 1,
-    Suffix = " ws",
-    CurrentValue = 16,
-    Callback = function(v)
-        if hum then hum.WalkSpeed = v end
-        print("[RealRecord] WalkSpeed =", v)
-    end
-})
-
-Tab:CreateSlider({
-    Name = "JumpPower",
-    Range = {10, 300}, -- normal 50
-    Increment = 1,
-    Suffix = " jp",
-    CurrentValue = 50,
-    Callback = function(v)
-        if hum then hum.JumpPower = v end
-        print("[RealRecord] JumpPower =", v)
-    end
-})
+Tab:CreateToggle("Fly Mode", function(val)
+	toggleFly(val)
+end)
