@@ -1,47 +1,26 @@
--- Load FluentPlus
-local Fluent = loadstring(game:HttpGet("https://raw.githubusercontent.com/discoart/FluentPlus/refs/heads/main/release.lua", true))()
+-- Contoh penggunaan UI-Library HoangNguyenk8 (UI only) — template
 
--- Buat Window utama
-local Window = Fluent:CreateWindow({
-    Title = "My Game UI",
-    SubTitle = "FluentPlus Example",
-    Theme = "Dark",          -- "Dark" / "Light"
-    Size = UDim2.fromOffset(450, 300),
-})
+-- Load UI library (ganti URL ke raw file UI-Library yang benar)
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/HoangNguyenk8/Scripts/main/UI-Library/YourUILibraryFile.lua", true))()
 
--- Tambah Tab
-local MainTab = Window:AddTab({ Title = "Main", Icon = "home" })
-local SettingsTab = Window:AddTab({ Title = "Settings", Icon = "settings" })
+-- Buat window utama
+local Window = Library:CreateWindow("My UI")
 
--- Tambah elemen di Main Tab
-MainTab:AddToggle("ExampleToggle", { Title = "Example Toggle", Default = false }, function(state)
-    print("Toggle State:", state)
+-- Tambah tab
+local MainTab = Window:CreateTab("Main")
+
+-- Contoh toggle
+MainTab:CreateToggle("FlyToggle", {Text = "Enable Fly", Default = false}, function(state)
+    print("Toggle:", state)
 end)
 
-MainTab:AddButton({
-    Title = "Example Button",
-    Description = "Click me!",
-    Callback = function()
-        print("Button clicked!")
-    end
-})
-
-MainTab:AddSlider("ExampleSlider", {
-    Title = "Example Slider",
-    Default = 5,
+-- Contoh slider
+MainTab:CreateSlider("SpeedSlider", {
+    Text = "Fly Speed",
+    Default = 2,
     Min = 1,
-    Max = 20,
-    Rounding = 1,
-}, function(value)
-    print("Slider Value:", value)
+    Max = 10,
+    Precise = false
+}, function(val)
+    print("Speed:", val)
 end)
-
--- Tambah elemen di Settings Tab
-SettingsTab:AddParagraph("Info", "Ini contoh UI pakai FluentPlus. Semua elemen bisa kamu custom.")
-
--- Contoh notifikasi
-Fluent:Notify({
-    Title = "FluentPlus",
-    Content = "UI berhasil dimuat ✅",
-    Duration = 5
-})
