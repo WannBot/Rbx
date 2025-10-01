@@ -34,14 +34,19 @@ local function toggleFly(state)
             if UIS:IsKeyDown(Enum.KeyCode.S) then add -= Camera.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.D) then add += Camera.CFrame.RightVector end
             if UIS:IsKeyDown(Enum.KeyCode.A) then add -= Camera.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.E) then add += Camera.CFrame.UpVector end
-            if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Camera.CFrame.UpVector end
+            if UIS:IsKeyDown(Enum.KeyCode.E) then add += Vector3.new(0,1,0) end
+            if UIS:IsKeyDown(Enum.KeyCode.Q) then add -= Vector3.new(0,1,0) end
 
-            -- Mobile joystick control (arah sesuai kamera)
+            -- Mobile joystick control (selalu konsisten dengan kamera)
             local moveDir = hum.MoveDirection
             if moveDir.Magnitude > 0 then
-                local relative = Camera.CFrame:VectorToWorldSpace(moveDir)
-                add += relative
+                -- Ambil orientasi horizontal kamera
+                local camCF = Camera.CFrame
+                local forward = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z).Unit
+                local right = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z).Unit
+
+                -- Gabungkan input joystick
+                add += (forward * moveDir.Z) + (right * moveDir.X)
             end
 
             -- Apply fly movement
@@ -88,7 +93,7 @@ Toggle.MouseButton1Click:Connect(function()
     toggleFly(flyOn)
 end)
 
--- Speed control (cycle button)
+-- Speed control
 SpeedBtn.Size = UDim2.new(1, -20, 0, 40)
 SpeedBtn.Position = UDim2.new(0, 10, 0, 60)
 SpeedBtn.Text = "Speed: x"..speed
