@@ -69,11 +69,15 @@ local Tab = LoginWindow:CreateTab("Auth 🔑", 0)
 local Section = Tab:CreateSection("Login Key")
 
 -- 🔑 Input Key (fixed)
+-- 🔑 Input Key (fixed)
+local inputKeyValue = ""
 local inputKey = Tab:CreateInput({
     Name = "Masukkan Key",
-    PlaceholderText = "paste key di sini",
+    Placeholder = "Paste key di sini",
     RemoveTextAfterFocusLost = false,
-    Callback = function() end
+    Callback = function(text)
+        inputKeyValue = text
+    end
 })
 
 local statusLabel = Tab:CreateLabel("Status: idle")
@@ -81,11 +85,13 @@ local statusLabel = Tab:CreateLabel("Status: idle")
 Tab:CreateButton({
     Name = "Login",
     Callback = function()
-        local key = inputKey.CurrentValue or ""
-        if key == "" then
+        if inputKeyValue == "" then
             statusLabel:Set("Status: Masukkan key terlebih dahulu")
             return
         end
+        -- lanjut validasi key seperti biasa
+    end
+})
 
         statusLabel:Set("Status: Memeriksa key...")
         local ok, res = validateKey(key)
