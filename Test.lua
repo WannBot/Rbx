@@ -2,15 +2,6 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local HttpService = game:GetService("HttpService")
 local Player = game:GetService("Players").LocalPlayer
 
--- 🔄 Format durasi key
-local function formatDuration(seconds)
-    local d = math.floor(seconds / 86400)
-    local h = math.floor(seconds % 86400 / 3600)
-    local m = math.floor(seconds % 3600 / 60)
-    local s = math.floor(seconds % 60)
-    return string.format("%dd %dh %dm %ds", d, h, m, s)
-end
-
 -- 🔑 Validasi key ke API
 local function validateKey(key)
     local requestFunc = (http_request or request or syn and syn.request)
@@ -99,21 +90,9 @@ Tab:CreateButton({
             local InfoTab = MainWindow:CreateTab("Info ℹ️", 0)
             InfoTab:CreateSection("Key Information")
 
-            local DurationLabel = InfoTab:CreateLabel("Key Duration: Checking...")
-
-            -- update durasi setiap detik
-            local totalSeconds = res.expires_in or 3600
-            task.spawn(function()
-                while totalSeconds > 0 and DurationLabel do
-                    DurationLabel:Set("Key Duration: " .. formatDuration(totalSeconds))
-                    task.wait(1)
-                    totalSeconds -= 1
-                end
-                if DurationLabel then
-                    DurationLabel:Set("Key Expired")
-                    Player:Kick("Key Expired. Silakan login ulang.")
-                end
-            end)
+            -- Format expired date dari API
+            local expiredDate = res.expired_date or "Unknown"
+            InfoTab:CreateLabel("Expired: " .. expiredDate)
         else
             Status:Set("Status: Key salah (" .. tostring(res) .. ")")
         end
