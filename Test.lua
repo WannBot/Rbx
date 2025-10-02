@@ -37,7 +37,7 @@ local function validateKey(key)
     end
 end
 
--- Buat Window Awal (Login)
+-- Window Awal (Login)
 local Window = Rayfield:CreateWindow({
     Name = "Key Login",
     LoadingTitle = "Botresi Key",
@@ -56,12 +56,11 @@ local inputKey = AuthTab:CreateInput({
     RemoveTextAfterFocusLost = false,
     Callback = function(text) end
 })
-inputKey.Input.Size = UDim2.new(0, 300, 0, 40) -- perlebar kolom input
 
 -- Status Label
 local statusLabel = AuthTab:CreateLabel("Status: idle")
 
--- Tombol Login
+-- Tombol Login HARUS lewat AuthTab
 AuthTab:CreateButton({
     Name = "Login dengan Key",
     Callback = function()
@@ -74,16 +73,16 @@ AuthTab:CreateButton({
         statusLabel:Set("Status: Memeriksa key...")
         local ok, res = validateKey(key)
         if ok then
-            -- Hapus semua tab lama (Auth)
+            -- Hapus Tab Auth
             for _, tab in pairs(Window.Tabs) do
                 tab.TabFrame:Destroy()
             end
 
-            -- Ubah Title Window & tambahkan Duration Key
+            -- Update Title Window & Tampilkan Duration
             Window:SetTitle("Botresi Hub")
             local duration = tostring(res.duration or "Unknown")
             local durationLabel = Window:CreateLabel("Key Duration: " .. duration)
-            durationLabel.Label.Position = UDim2.new(0.5, -100, 0, 10) -- tampil di tengah header
+            durationLabel.Label.Position = UDim2.new(0.5, -100, 0, 10)
             durationLabel.Label.Size = UDim2.new(0, 200, 0, 20)
             durationLabel.Label.TextScaled = true
 
@@ -94,7 +93,6 @@ AuthTab:CreateButton({
             -- Tab Settings
             local SettingsTab = Window:CreateTab("Settings", 4483362458)
 
-            -- Theme Options
             local Themes = {
                 ["Default"] = "Default",
                 ["Amber Glow"] = "AmberGlow",
@@ -126,12 +124,11 @@ AuthTab:CreateButton({
                 end
             })
 
-            -- Hide / Show / Check / Destroy UI
             SettingsTab:CreateButton({
                 Name = "Hide UI",
                 Callback = function()
                     Rayfield:SetVisibility(false)
-                    Rayfield:Notify({Title="UI Hidden",Content="Rayfield interface hidden",Duration=3})
+                    Rayfield:Notify({Title="UI Hidden",Content="Rayfield hidden",Duration=3})
                 end
             })
 
@@ -139,7 +136,7 @@ AuthTab:CreateButton({
                 Name = "Show UI",
                 Callback = function()
                     Rayfield:SetVisibility(true)
-                    Rayfield:Notify({Title="UI Shown",Content="Rayfield interface visible",Duration=3})
+                    Rayfield:Notify({Title="UI Shown",Content="Rayfield visible",Duration=3})
                 end
             })
 
@@ -149,7 +146,7 @@ AuthTab:CreateButton({
                     local visible = Rayfield:IsVisible()
                     Rayfield:Notify({
                         Title = "UI Visibility",
-                        Content = visible and "UI is visible" or "UI is hidden",
+                        Content = visible and "UI visible" or "UI hidden",
                         Duration = 3
                     })
                 end
@@ -160,7 +157,6 @@ AuthTab:CreateButton({
                 Callback = function() Rayfield:Destroy() end
             })
 
-            -- Notify Sukses
             Rayfield:Notify({
                 Title = "Login Sukses",
                 Content = "Key valid! Durasi: " .. duration,
