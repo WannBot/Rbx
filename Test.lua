@@ -1,10 +1,8 @@
 -- Services
 local HttpService = game:GetService("HttpService")
-
--- Load Rayfield
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Fungsi validasi key (pakai executor http_request/syn.request)
+-- Fungsi validasi key
 local function validateKey(key)
     local endpoint = "https://botresi.xyz/keygen/api/validate.php"
     local body = "key=" .. key
@@ -18,17 +16,12 @@ local function validateKey(key)
         Body = body
     })
 
-    if not response or not response.Body then
-        return false, "no_response"
-    end
+    if not response or not response.Body then return false, "no_response" end
 
     local success, data = pcall(function()
         return HttpService:JSONDecode(response.Body)
     end)
-
-    if not success then
-        return false, "invalid_response"
-    end
+    if not success then return false, "invalid_response" end
 
     if data.valid then
         return true, data
@@ -37,7 +30,7 @@ local function validateKey(key)
     end
 end
 
--- Window Awal (Login)
+-- Window Awal
 local Window = Rayfield:CreateWindow({
     Name = "Key Login",
     LoadingTitle = "Botresi Key",
@@ -49,37 +42,43 @@ local Window = Rayfield:CreateWindow({
 local AuthTab = Window:CreateTab("Auth", 0)
 AuthTab:CreateSection("Login Key")
 
--- Input Key (dibuat lebih lebar)
+-- Variabel untuk input
+local inputValue = ""
+
+-- Input Key (lebih lebar)
 local inputKey = AuthTab:CreateInput({
     Name = "Masukkan Key",
     PlaceholderText = "paste key di sini",
     RemoveTextAfterFocusLost = false,
-    Callback = function(text) end
+    Callback = function(text)
+        inputValue = text
+    end
 })
 
 -- Status Label
 local statusLabel = AuthTab:CreateLabel("Status: idle")
 
--- Tombol Login HARUS lewat AuthTab
+-- Tombol Login
 AuthTab:CreateButton({
     Name = "Login dengan Key",
     Callback = function()
-        local key = inputKey.CurrentValue
-        if not key or key == "" then
+        if inputValue == "" then
             statusLabel:Set("Status: Masukkan key terlebih dahulu")
             return
         end
 
         statusLabel:Set("Status: Memeriksa key...")
-        local ok, res = validateKey(key)
+        local ok, res = validateKey(inputValue)
         if ok then
-            -- Hapus Tab Auth
+            -- hapus tab auth
             for _, tab in pairs(Window.Tabs) do
                 tab.TabFrame:Destroy()
             end
 
-            -- Update Title Window & Tampilkan Duration
+            -- ganti title
             Window:SetTitle("Botresi Hub")
+
+            -- label durasi
             local duration = tostring(res.duration or "Unknown")
             local durationLabel = Window:CreateLabel("Key Duration: " .. duration)
             durationLabel.Label.Position = UDim2.new(0.5, -100, 0, 10)
@@ -124,38 +123,17 @@ AuthTab:CreateButton({
                 end
             })
 
-            SettingsTab:CreateButton({
-                Name = "Hide UI",
-                Callback = function()
-                    Rayfield:SetVisibility(false)
-                    Rayfield:Notify({Title="UI Hidden",Content="Rayfield hidden",Duration=3})
-                end
-            })
-
-            SettingsTab:CreateButton({
-                Name = "Show UI",
-                Callback = function()
-                    Rayfield:SetVisibility(true)
-                    Rayfield:Notify({Title="UI Shown",Content="Rayfield visible",Duration=3})
-                end
-            })
-
-            SettingsTab:CreateButton({
-                Name = "Check UI Visible?",
-                Callback = function()
-                    local visible = Rayfield:IsVisible()
-                    Rayfield:Notify({
-                        Title = "UI Visibility",
-                        Content = visible and "UI visible" or "UI hidden",
-                        Duration = 3
-                    })
-                end
-            })
-
-            SettingsTab:CreateButton({
-                Name = "Destroy UI",
-                Callback = function() Rayfield:Destroy() end
-            })
+            SettingsTab:CreateButton({Name="Hide UI", Callback=function() Rayfield:SetVisibility(false) end})
+            SettingsTab:CreateButton({Name="Show UI", Callback=function() Rayfield:SetVisibility(true) end})
+            SettingsTab:CreateButton({Name="Check UI Visible?", Callback=function()
+                local visible = Rayfield:IsVisible()
+                Rayfield:Notify({
+                    Title="UI Visibility",
+                    Content=visible and "UI visible" or "UI hidden",
+                    Duration=3
+                })
+            end})
+            SettingsTab:CreateButton({Name="Destroy UI", Callback=function() Rayfield:Destroy() end})
 
             Rayfield:Notify({
                 Title = "Login Sukses",
