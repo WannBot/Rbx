@@ -73,7 +73,7 @@ AuthTab:CreateButton({
             Rayfield = loadRayfield()
 
             ------------------------------------------------------
-            -- UI MAIN setelah login
+            -- UI setelah login
             ------------------------------------------------------
             local MainWindow = Rayfield:CreateWindow({
                 Name = "Botresi Hub",
@@ -87,14 +87,13 @@ AuthTab:CreateButton({
             MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
 
             ------------------------------------------------------
-            -- 🔥 Fitur Speed
+            -- 🔥 Fitur Speed (Dropdown + Input)
             ------------------------------------------------------
             local Humanoid = getHumanoid()
             local speedEnabled = false
             local speedValue = 16
-            local speedSlider = nil
 
-            -- Dropdown untuk toggle
+            -- Dropdown Speed On/Off
             MainTab:CreateDropdown({
                 Name = "Speed",
                 Options = {"Off", "On"},
@@ -104,17 +103,18 @@ AuthTab:CreateButton({
                         speedEnabled = true
                         Humanoid.WalkSpeed = speedValue
 
-                        -- Slider
-                        speedSlider = MainTab:CreateSlider({
-                            Name = "Speed Control",
-                            Range = {16, 200},
-                            Increment = 1,
-                            Suffix = " WalkSpeed",
-                            CurrentValue = speedValue,
-                            Callback = function(value)
-                                speedValue = value
-                                if speedEnabled then
-                                    Humanoid.WalkSpeed = speedValue
+                        -- Input manual angka
+                        MainTab:CreateInput({
+                            Name = "Atur Speed",
+                            PlaceholderText = tostring(speedValue),
+                            RemoveTextAfterFocusLost = false,
+                            Callback = function(text)
+                                local num = tonumber(text)
+                                if num then
+                                    speedValue = math.clamp(num, 16, 200)
+                                    if speedEnabled then
+                                        Humanoid.WalkSpeed = speedValue
+                                    end
                                 end
                             end
                         })
@@ -123,10 +123,8 @@ AuthTab:CreateButton({
                         MainTab:CreateButton({
                             Name = "-",
                             Callback = function()
-                                if speedSlider then
-                                    local newVal = math.max(16, speedValue - 1)
-                                    speedSlider:Set(newVal)
-                                end
+                                speedValue = math.max(16, speedValue - 1)
+                                if speedEnabled then Humanoid.WalkSpeed = speedValue end
                             end
                         })
 
@@ -134,10 +132,8 @@ AuthTab:CreateButton({
                         MainTab:CreateButton({
                             Name = "+",
                             Callback = function()
-                                if speedSlider then
-                                    local newVal = math.min(200, speedValue + 1)
-                                    speedSlider:Set(newVal)
-                                end
+                                speedValue = math.min(200, speedValue + 1)
+                                if speedEnabled then Humanoid.WalkSpeed = speedValue end
                             end
                         })
 
