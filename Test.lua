@@ -5,6 +5,13 @@ end
 local Rayfield = loadRayfield()
 local HttpService = game:GetService("HttpService")
 local Player = game:GetService("Players").LocalPlayer
+local Humanoid = nil
+
+-- Cari humanoid player
+local function getHumanoid()
+    local char = Player.Character or Player.CharacterAdded:Wait()
+    return char:WaitForChild("Humanoid")
+end
 
 -- 🔑 Validasi key ke API
 local function validateKey(key)
@@ -93,6 +100,49 @@ AuthTab:CreateButton({
             MainTab:CreateSection("Fitur Utama")
             MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
 
+            ------------------------------------------------------
+            -- 🔥 Fitur Speed
+            ------------------------------------------------------
+            Humanoid = getHumanoid()
+            local speedEnabled = false
+            local speedValue = 16
+
+            -- Toggle dropdown (On/Off)
+            MainTab:CreateDropdown({
+                Name = "Speed",
+                Options = {"Off", "On"},
+                CurrentOption = {"Off"},
+                Callback = function(option)
+                    if option[1] == "On" then
+                        speedEnabled = true
+                        Humanoid.WalkSpeed = speedValue
+                    else
+                        speedEnabled = false
+                        Humanoid.WalkSpeed = 16 -- default Roblox
+                    end
+                end
+            })
+
+            -- Label kiri (-)
+            MainTab:CreateLabel("-")
+
+            -- Slider Speed
+            MainTab:CreateSlider({
+                Name = "Speed Control",
+                Range = {16, 200},
+                Increment = 1,
+                Suffix = " WalkSpeed",
+                CurrentValue = 16,
+                Callback = function(value)
+                    speedValue = value
+                    if speedEnabled then
+                        Humanoid.WalkSpeed = speedValue
+                    end
+                end
+            })
+
+            -- Label kanan (+)
+            MainTab:CreateLabel("+")
         else
             Status:Set("Status: Key salah (" .. tostring(res) .. ")")
         end
