@@ -87,15 +87,16 @@ AuthTab:CreateButton({
             MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
 
             ------------------------------------------------------
-            -- 🔥 Fitur Speed (Dropdown + Input sekali)
+            -- 🔥 Fitur Speed (Dropdown berisi On/Off + Input)
             ------------------------------------------------------
             local Humanoid = getHumanoid()
             local speedEnabled = false
             local speedValue = 16
 
-            -- Dropdown toggle On/Off
+            local SpeedSection = MainTab:CreateSection("Speed")
+
             MainTab:CreateDropdown({
-                Name = "Speed",
+                Name = "Speed Mode",
                 Options = {"Off", "On"},
                 CurrentOption = {"Off"},
                 Callback = function(option)
@@ -109,7 +110,7 @@ AuthTab:CreateButton({
                 end
             })
 
-            -- Input angka (selalu ada)
+            -- Input angka di bawah dropdown Speed
             MainTab:CreateInput({
                 Name = "Atur Speed",
                 PlaceholderText = tostring(speedValue),
