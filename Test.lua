@@ -59,8 +59,6 @@ local LoginWindow = Rayfield:CreateWindow({
     Name = "Botresi Hub",
     LoadingTitle = "Key Login",
     LoadingSubtitle = "Gunakan key untuk masuk",
-    DisableRayfieldPrompts = false,
-    DisableBuildWarnings = false,
     Theme = "Default",
     ConfigurationSaving = {
         Enabled = false
@@ -70,18 +68,17 @@ local LoginWindow = Rayfield:CreateWindow({
 local Tab = LoginWindow:CreateTab("Auth 🔑", 0)
 local Section = Tab:CreateSection("Login Key")
 
-local inputKey = Rayfield:CreateInput({
+-- 🔑 Input Key (fixed)
+local inputKey = Tab:CreateInput({
     Name = "Masukkan Key",
-    PlaceholderText = "Paste key di sini",
+    PlaceholderText = "paste key di sini",
     RemoveTextAfterFocusLost = false,
     Callback = function() end
 })
 
-local statusLabel = Rayfield:CreateLabel({
-    Name = "Status: idle"
-})
+local statusLabel = Tab:CreateLabel("Status: idle")
 
-Rayfield:CreateButton({
+Tab:CreateButton({
     Name = "Login",
     Callback = function()
         local key = inputKey.CurrentValue or ""
@@ -111,10 +108,9 @@ Rayfield:CreateButton({
                 }
             })
 
-            -- Tab Utama
             local MainTab = MainWindow:CreateTab("Main", 0)
             MainTab:CreateSection("Fitur Utama")
-            MainTab:CreateLabel({Name = "Selamat Datang, " .. Player.Name})
+            MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
 
             -- Tambahkan Durasi Key ke Header
             task.wait(1)
@@ -134,7 +130,7 @@ Rayfield:CreateButton({
                 durationLabel.Text = "Checking..."
                 durationLabel.Parent = topbar
 
-                local totalSeconds = res.expires_in or 3600 -- dari API, fallback 1 jam
+                local totalSeconds = res.expires_in or 3600 -- dari API
 
                 task.spawn(function()
                     while totalSeconds > 0 and durationLabel.Parent do
@@ -144,10 +140,10 @@ Rayfield:CreateButton({
                     end
                     if durationLabel.Parent then
                         durationLabel.Text = "Key Expired"
+                        Player:Kick("Key Expired. Silakan login ulang.")
                     end
                 end)
             end
-
         else
             statusLabel:Set("Status: Key tidak valid (" .. tostring(res) .. ")")
         end
