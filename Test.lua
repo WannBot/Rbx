@@ -87,13 +87,13 @@ AuthTab:CreateButton({
             MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
 
             ------------------------------------------------------
-            -- 🔥 Fitur Speed (Dropdown + Input)
+            -- 🔥 Fitur Speed (Dropdown + Input sekali)
             ------------------------------------------------------
             local Humanoid = getHumanoid()
             local speedEnabled = false
             local speedValue = 16
 
-            -- Dropdown Speed On/Off
+            -- Dropdown toggle On/Off
             MainTab:CreateDropdown({
                 Name = "Speed",
                 Options = {"Off", "On"},
@@ -102,44 +102,25 @@ AuthTab:CreateButton({
                     if option[1] == "On" then
                         speedEnabled = true
                         Humanoid.WalkSpeed = speedValue
-
-                        -- Input manual angka
-                        MainTab:CreateInput({
-                            Name = "Atur Speed",
-                            PlaceholderText = tostring(speedValue),
-                            RemoveTextAfterFocusLost = false,
-                            Callback = function(text)
-                                local num = tonumber(text)
-                                if num then
-                                    speedValue = math.clamp(num, 16, 200)
-                                    if speedEnabled then
-                                        Humanoid.WalkSpeed = speedValue
-                                    end
-                                end
-                            end
-                        })
-
-                        -- Tombol -
-                        MainTab:CreateButton({
-                            Name = "-",
-                            Callback = function()
-                                speedValue = math.max(16, speedValue - 1)
-                                if speedEnabled then Humanoid.WalkSpeed = speedValue end
-                            end
-                        })
-
-                        -- Tombol +
-                        MainTab:CreateButton({
-                            Name = "+",
-                            Callback = function()
-                                speedValue = math.min(200, speedValue + 1)
-                                if speedEnabled then Humanoid.WalkSpeed = speedValue end
-                            end
-                        })
-
                     else
                         speedEnabled = false
                         Humanoid.WalkSpeed = 16
+                    end
+                end
+            })
+
+            -- Input angka (selalu ada)
+            MainTab:CreateInput({
+                Name = "Atur Speed",
+                PlaceholderText = tostring(speedValue),
+                RemoveTextAfterFocusLost = false,
+                Callback = function(text)
+                    local num = tonumber(text)
+                    if num then
+                        speedValue = math.clamp(num, 16, 200)
+                        if speedEnabled then
+                            Humanoid.WalkSpeed = speedValue
+                        end
                     end
                 end
             })
