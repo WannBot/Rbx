@@ -90,41 +90,30 @@ Tab:CreateButton({
                 Theme = "Default"
             })
 
+            -- Tab Main
             local MainTab = MainWindow:CreateTab("Main", 0)
             MainTab:CreateSection("Fitur Utama")
             MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
 
-            -- ⏱ Durasi Key di header kanan
-            task.wait(1)
-            local topbar = game:GetService("CoreGui"):FindFirstChild("Rayfield"):FindFirstChild("Topbar", true)
-            if topbar then
-                local durationLabel = Instance.new("TextLabel")
-                durationLabel.Name = "DurationLabel"
-                durationLabel.Size = UDim2.new(0, 250, 1, 0)
-                durationLabel.Position = UDim2.new(1, -260, 0, 0)
-                durationLabel.BackgroundTransparency = 1
-                durationLabel.TextColor3 = Color3.fromRGB(255,255,255)
-                durationLabel.TextStrokeTransparency = 0.5
-                durationLabel.Font = Enum.Font.GothamBold
-                durationLabel.TextScaled = true
-                durationLabel.TextXAlignment = Enum.TextXAlignment.Right
-                durationLabel.Text = "Checking..."
-                durationLabel.Parent = topbar
+            -- Tab Info
+            local InfoTab = MainWindow:CreateTab("Info ℹ️", 0)
+            InfoTab:CreateSection("Key Information")
 
-                local totalSeconds = res.expires_in or 3600
+            local DurationLabel = InfoTab:CreateLabel("Key Duration: Checking...")
 
-                task.spawn(function()
-                    while totalSeconds > 0 and durationLabel.Parent do
-                        durationLabel.Text = "Key Duration: " .. formatDuration(totalSeconds)
-                        task.wait(1)
-                        totalSeconds -= 1
-                    end
-                    if durationLabel.Parent then
-                        durationLabel.Text = "Key Expired"
-                        Player:Kick("Key Expired. Silakan login ulang.")
-                    end
-                end)
-            end
+            -- update durasi setiap detik
+            local totalSeconds = res.expires_in or 3600
+            task.spawn(function()
+                while totalSeconds > 0 and DurationLabel do
+                    DurationLabel:Set("Key Duration: " .. formatDuration(totalSeconds))
+                    task.wait(1)
+                    totalSeconds -= 1
+                end
+                if DurationLabel then
+                    DurationLabel:Set("Key Expired")
+                    Player:Kick("Key Expired. Silakan login ulang.")
+                end
+            end)
         else
             Status:Set("Status: Key salah (" .. tostring(res) .. ")")
         end
