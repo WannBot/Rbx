@@ -31,18 +31,18 @@ end
 ------------------------------------------------------
 -- UI LOGIN
 ------------------------------------------------------
-local LoginWindow = Rayfield:CreateWindow({
+local Window = Rayfield:CreateWindow({
     Name = "Botresi Hub",
     LoadingTitle = "Key Login",
     LoadingSubtitle = "Gunakan key untuk masuk",
     Theme = "Default"
 })
 
-local Tab = LoginWindow:CreateTab("Auth 🔑", 0)
-Tab:CreateSection("Login Key")
+local AuthTab = Window:CreateTab("Auth 🔑", 0)
+AuthTab:CreateSection("Login Key")
 
 local inputKeyValue = ""
-local KeyInput = Tab:CreateInput({
+local KeyInput = AuthTab:CreateInput({
     Name = "Masukkan Key",
     PlaceholderText = "Paste key di sini",
     RemoveTextAfterFocusLost = false,
@@ -51,9 +51,9 @@ local KeyInput = Tab:CreateInput({
     end
 })
 
-local Status = Tab:CreateLabel("Status: idle")
+local Status = AuthTab:CreateLabel("Status: idle")
 
-Tab:CreateButton({
+AuthTab:CreateButton({
     Name = "Login",
     Callback = function()
         if inputKeyValue == "" then
@@ -67,32 +67,26 @@ Tab:CreateButton({
         if ok then
             Status:Set("Status: Key valid ✔")
 
-            task.wait(1)
-            Rayfield:Destroy()
-            task.wait(1)
+            -- 🔥 Hapus/disable Tab Auth
+            AuthTab:Destroy()
 
             ------------------------------------------------------
-            -- UI MAIN setelah login
-            ------------------------------------------------------
-            local MainWindow = Rayfield:CreateWindow({
-                Name = "Botresi Hub",
-                LoadingTitle = "Botresi Hub",
-                LoadingSubtitle = "Selamat Datang",
-                Theme = "Default"
-            })
-
             -- Tab Main
-            local MainTab = MainWindow:CreateTab("Main", 0)
+            ------------------------------------------------------
+            local MainTab = Window:CreateTab("Main", 0)
             MainTab:CreateSection("Fitur Utama")
             MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
 
+            ------------------------------------------------------
             -- Tab Info
-            local InfoTab = MainWindow:CreateTab("Info ℹ️", 0)
+            ------------------------------------------------------
+            local InfoTab = Window:CreateTab("Info ℹ️", 0)
             InfoTab:CreateSection("Key Information")
 
-            -- Format expired date dari API
+            -- Format expired date
             local expiredDate = res.expired_date or "Unknown"
             InfoTab:CreateLabel("Expired: " .. expiredDate)
+
         else
             Status:Set("Status: Key salah (" .. tostring(res) .. ")")
         end
