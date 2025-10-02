@@ -5,20 +5,17 @@ end
 local Rayfield = loadRayfield()
 local HttpService = game:GetService("HttpService")
 local Player = game:GetService("Players").LocalPlayer
-local Humanoid = nil
 
--- Cari humanoid player
+-- ambil humanoid
 local function getHumanoid()
     local char = Player.Character or Player.CharacterAdded:Wait()
     return char:WaitForChild("Humanoid")
 end
 
--- 🔑 Validasi key ke API
+-- validasi key API
 local function validateKey(key)
     local requestFunc = (http_request or request or syn and syn.request)
-    if not requestFunc then
-        return false, "Executor tidak support http_request"
-    end
+    if not requestFunc then return false, "Executor tidak support http_request" end
 
     local response = requestFunc({
         Url = "https://botresi.xyz/keygen/api/validate.php",
@@ -28,15 +25,9 @@ local function validateKey(key)
     })
 
     if not response or not response.Body then return false, "no_response" end
-
     local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
     if not ok then return false, "invalid_response" end
-
-    if data.valid then
-        return true, data
-    else
-        return false, data.reason or "invalid"
-    end
+    if data.valid then return true, data else return false, data.reason or "invalid" end
 end
 
 ------------------------------------------------------
@@ -53,13 +44,11 @@ local AuthTab = LoginWindow:CreateTab("Auth 🔑", 0)
 AuthTab:CreateSection("Login Key")
 
 local inputKeyValue = ""
-local KeyInput = AuthTab:CreateInput({
+AuthTab:CreateInput({
     Name = "Masukkan Key",
     PlaceholderText = "Paste key di sini",
     RemoveTextAfterFocusLost = false,
-    Callback = function(text)
-        inputKeyValue = text
-    end
+    Callback = function(text) inputKeyValue = text end
 })
 
 local Status = AuthTab:CreateLabel("Status: idle")
@@ -79,15 +68,12 @@ AuthTab:CreateButton({
             Status:Set("Status: Key valid ✔")
             task.wait(1)
 
-            -- 🔥 Destroy dulu semua UI lama
             Rayfield:Destroy()
             task.wait(1)
-
-            -- ✅ Load ulang Rayfield baru
             Rayfield = loadRayfield()
 
             ------------------------------------------------------
-            -- UI setelah login
+            -- UI MAIN setelah login
             ------------------------------------------------------
             local MainWindow = Rayfield:CreateWindow({
                 Name = "Botresi Hub",
@@ -103,11 +89,12 @@ AuthTab:CreateButton({
             ------------------------------------------------------
             -- 🔥 Fitur Speed
             ------------------------------------------------------
-            Humanoid = getHumanoid()
+            local Humanoid = getHumanoid()
             local speedEnabled = false
             local speedValue = 16
+            local speedSlider = nil
 
-            -- Toggle dropdown (On/Off)
+            -- Dropdown untuk toggle
             MainTab:CreateDropdown({
                 Name = "Speed",
                 Options = {"Off", "On"},
@@ -116,33 +103,51 @@ AuthTab:CreateButton({
                     if option[1] == "On" then
                         speedEnabled = true
                         Humanoid.WalkSpeed = speedValue
+
+                        -- Slider
+                        speedSlider = MainTab:CreateSlider({
+                            Name = "Speed Control",
+                            Range = {16, 200},
+                            Increment = 1,
+                            Suffix = " WalkSpeed",
+                            CurrentValue = speedValue,
+                            Callback = function(value)
+                                speedValue = value
+                                if speedEnabled then
+                                    Humanoid.WalkSpeed = speedValue
+                                end
+                            end
+                        })
+
+                        -- Tombol -
+                        MainTab:CreateButton({
+                            Name = "-",
+                            Callback = function()
+                                if speedSlider then
+                                    local newVal = math.max(16, speedValue - 1)
+                                    speedSlider:Set(newVal)
+                                end
+                            end
+                        })
+
+                        -- Tombol +
+                        MainTab:CreateButton({
+                            Name = "+",
+                            Callback = function()
+                                if speedSlider then
+                                    local newVal = math.min(200, speedValue + 1)
+                                    speedSlider:Set(newVal)
+                                end
+                            end
+                        })
+
                     else
                         speedEnabled = false
-                        Humanoid.WalkSpeed = 16 -- default Roblox
+                        Humanoid.WalkSpeed = 16
                     end
                 end
             })
 
-            -- Label kiri (-)
-            MainTab:CreateLabel("-")
-
-            -- Slider Speed
-            MainTab:CreateSlider({
-                Name = "Speed Control",
-                Range = {16, 200},
-                Increment = 1,
-                Suffix = " WalkSpeed",
-                CurrentValue = 16,
-                Callback = function(value)
-                    speedValue = value
-                    if speedEnabled then
-                        Humanoid.WalkSpeed = speedValue
-                    end
-                end
-            })
-
-            -- Label kanan (+)
-            MainTab:CreateLabel("+")
         else
             Status:Set("Status: Key salah (" .. tostring(res) .. ")")
         end
