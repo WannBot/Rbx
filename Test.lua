@@ -32,22 +32,33 @@ local statusLabel = AuthTab:CreateLabel("Status: idle")
 
 -- Fungsi validasi key
 local function validateKey(key)
-    local endpoint = "https://botresi.xyz/keygen/api/validate.php" -- API kamu
-    local body = "key=" .. HttpService:UrlEncode(key)
-    local headers = { ["Content-Type"] = "application/x-www-form-urlencoded" }
+    local endpoint = "https://botresi.xyz/keygen/api/validate.php"
+    local body = "key=" .. key
 
-    local ok, resp = pcall(function()
-        return HttpService:PostAsync(endpoint, body, Enum.HttpContentType.ApplicationUrlEncoded, false, headers)
-    end)
+    local requestFunc = (http_request or request or syn and syn.request)
 
-    if not ok then
-        return false, "http_error: " .. tostring(resp)
+    if not requestFunc then
+        return false, "Executor tidak support HTTP request"
     end
 
-    local decodeOk, data = pcall(function()
-        return HttpService:JSONDecode(resp) end)
+    local response = requestFunc({
+        Url = endpoint,
+        Method = "POST",
+        Headers = {
+            ["Content-Type"] = "application/x-www-form-urlencoded"
+        },
+        Body = body
+    })
 
-    if not decodeOk then
+    if not response or not response.Body then
+        return false, "no_response"
+    end
+
+    local success, data = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(response.Body)
+    end)
+
+    if not success then
         return false, "invalid_response"
     end
 
@@ -57,7 +68,6 @@ local function validateKey(key)
         return false, data.reason or "invalid"
     end
 end
-
 -- Tombol Login
 AuthTab:CreateButton({
     Name = "Login dengan Key",
