@@ -1,101 +1,126 @@
--- // LocalScript: Tap To Walk with Dot Path Visualization
+-- // LocalScript: Manual Path Maker + Saver
 local Players = game:GetService("Players")
-local PathfindingService = game:GetService("PathfindingService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-
+local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
-local char = player.Character or player.CharacterAdded:Wait()
-local hum = char:WaitForChild("Humanoid")
-local hrp = char:WaitForChild("HumanoidRootPart")
 
 --=== STATE ===--
-local activePath = nil
-local pathDots = {}
-local moving = false
+local pathPoints = {}
+local dots = {}
 
 --=== VISUAL ===--
+local function createDot(position)
+	local dot = Instance.new("Part")
+	dot.Shape = Enum.PartType.Ball
+	dot.Anchored = true
+	dot.CanCollide = false
+	dot.Material = Enum.Material.Neon
+	dot.Color = Color3.fromRGB(0, 255, 0)
+	dot.Size = Vector3.new(0.4, 0.4, 0.4)
+	dot.Position = position + Vector3.new(0, 0.2, 0)
+	dot.Parent = workspace
+	table.insert(dots, dot)
+end
+
 local function clearDots()
-	for _, d in ipairs(pathDots) do
+	for _, d in ipairs(dots) do
 		if d and d.Parent then d:Destroy() end
 	end
-	pathDots = {}
+	dots = {}
+	pathPoints = {}
 end
 
-local function showPath(waypoints)
+local function redrawDots()
 	clearDots()
-	for _, wp in ipairs(waypoints) do
-		local dot = Instance.new("Part")
-		dot.Shape = Enum.PartType.Ball
-		dot.Anchored = true
-		dot.CanCollide = false
-		dot.Material = Enum.Material.Neon
-		dot.Color = Color3.fromRGB(0, 255, 0)
-		dot.Size = Vector3.new(0.4, 0.4, 0.4)
-		dot.Position = wp.Position + Vector3.new(0, 0.2, 0)
-		dot.Parent = workspace
-		table.insert(pathDots, dot)
+	for _, pos in ipairs(pathPoints) do
+		createDot(pos)
 	end
 end
 
---=== PATHFINDING ===--
-local function moveToPoint(position)
-	local path = PathfindingService:CreatePath({
-		AgentRadius = 2,
-		AgentHeight = 5,
-		AgentCanJump = true
-	})
-	path:ComputeAsync(hrp.Position, position)
-
-	if path.Status == Enum.PathStatus.Success then
-		activePath = path
-		showPath(path:GetWaypoints())
-
-		moving = true
-		for _, waypoint in ipairs(path:GetWaypoints()) do
-			if not moving then break end
-			hum:MoveTo(waypoint.Position)
-			hum.MoveToFinished:Wait()
-			if waypoint.Action == Enum.PathWaypointAction.Jump then
-				hum:ChangeState(Enum.HumanoidStateType.Jumping)
-			end
-		end
-	else
-		warn("Gagal menghitung jalur ke lokasi tersebut.")
-	end
-	moving = false
-end
-
---=== INPUT ===--
+--=== INPUT CLICK ===--
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		local mouse = player:GetMouse()
-		local targetPos = mouse.Hit and mouse.Hit.p
-		if targetPos then
-			moveToPoint(targetPos)
+		if mouse.Target then
+			local pos = mouse.Hit.p
+			table.insert(pathPoints, pos)
+			createDot(pos)
+			print("Titik ditambahkan:", pos)
 		end
 	end
 end)
 
+--=== SAVE / LOAD ===--
+local function savePath(name)
+	if #pathPoints == 0 then
+		warn("Belum ada titik untuk disimpan.")
+		return
+	end
+	local simple = {}
+	for _, v in ipairs(pathPoints) do
+		table.insert(simple, {X = v.X, Y = v.Y, Z = v.Z})
+	end
+	local json = HttpService:JSONEncode(simple)
+	writefile(name .. ".json", json)
+	print("[PathMaker] Jalur disimpan ke", name .. ".json")
+end
+
+local function loadPath(name)
+	if not isfile(name .. ".json") then
+		warn("File tidak ditemukan:", name)
+		return
+	end
+	local json = readfile(name .. ".json")
+	local data = HttpService:JSONDecode(json)
+	pathPoints = {}
+	for _, p in ipairs(data) do
+		table.insert(pathPoints, Vector3.new(p.X, p.Y, p.Z))
+	end
+	print("[PathMaker] Jalur dimuat, total titik:", #pathPoints)
+	redrawDots()
+end
+
+local function undoLast()
+	if #pathPoints > 0 then
+		table.remove(pathPoints, #pathPoints)
+		redrawDots()
+		print("[PathMaker] Titik terakhir dihapus.")
+	end
+end
+
 --=== UI (RAYFIELD) ===--
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-	Name = "Path Visualizer",
-	LoadingTitle = "Tap to Walk",
-	LoadingSubtitle = "Path Dot Visual",
+	Name = "Manual Path Maker",
+	LoadingTitle = "Init",
+	LoadingSubtitle = "Custom Path Creator",
 	KeySystem = false
 })
 
-local Tab = Window:CreateTab("Path Control", 4483362458)
+local Tab = Window:CreateTab("Path Builder", 4483362458)
+
 Tab:CreateButton({
-	Name = "🧹 Clear Path Dots",
+	Name = "↩️ Undo Titik Terakhir",
+	Callback = undoLast
+})
+Tab:CreateButton({
+	Name = "🧹 Clear Semua Titik",
 	Callback = clearDots
 })
-Tab:CreateToggle({
-	Name = "⏹ Stop Movement",
-	CurrentValue = false,
-	Callback = function(state)
-		moving = not state
+Tab:CreateInput({
+	Name = "💾 Save Jalur (nama file)",
+	PlaceholderText = "contoh: jalur1",
+	RemoveTextAfterFocusLost = false,
+	Callback = function(input)
+		savePath(input)
+	end
+})
+Tab:CreateInput({
+	Name = "📂 Load Jalur (nama file)",
+	PlaceholderText = "contoh: jalur1",
+	RemoveTextAfterFocusLost = false,
+	Callback = function(input)
+		loadPath(input)
 	end
 })
