@@ -1,148 +1,178 @@
--- LocalScript by ChatGPT v3 (Realistic Movement Replay)
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local hrp = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
-
-local recordedFrames = {}
-local recording = false
-local playing = false
-local walkSpeed = 14
-local frameInterval = 0.1
-local fileName = "pathrecord_realistic.json"
-local currentFrame = 1
-local timeAccumulator = 0
+local HumanoidRootPart = Player.Character:WaitForChild("HumanoidRootPart")
 
 ------------------------------------------------------
--- UI
+-- Variabel Dasar
+------------------------------------------------------
+local Recording = false
+local Playing = false
+local RecordedPath = {}
+local WalkSpeed = 16
+local JumpPower = 50
+local SpeedMultiplier = 1
+
+------------------------------------------------------
+-- Fungsi Utility
+------------------------------------------------------
+local function formatVector3(v)
+	return string.format("%.2f, %.2f, %.2f", v.X, v.Y, v.Z)
+end
+
+local function savePath()
+    if #RecordedPath == 0 then return end
+    local json = HttpService:JSONEncode(RecordedPath)
+    writefile("autowalk_path.json", json)
+    Rayfield:Notify({
+        Title = "Saved!",
+        Content = "Path tersimpan ke autowalk_path.json",
+        Duration = 5,
+        Image = 4483362458
+    })
+end
+
+local function loadPath()
+    if isfile("autowalk_path.json") then
+        local data = readfile("autowalk_path.json")
+        local success, path = pcall(function()
+            return HttpService:JSONDecode(data)
+        end)
+        if success then
+            RecordedPath = path
+            Rayfield:Notify({
+                Title = "Loaded!",
+                Content = "Path berhasil dimuat (" .. tostring(#path) .. " titik)",
+                Duration = 5,
+                Image = 4483362458
+            })
+        end
+    else
+        Rayfield:Notify({
+            Title = "Gagal",
+            Content = "File path belum ada!",
+            Duration = 5,
+            Image = 4483362458
+        })
+    end
+end
+
+------------------------------------------------------
+-- Fungsi Record dan Play
+------------------------------------------------------
+local function recordPath()
+    if Recording then return end
+    Recording = true
+    RecordedPath = {}
+    Rayfield:Notify({Title="Recording",Content="Merekam jalur berjalan...",Duration=4,Image=4483362458})
+
+    local lastPos = HumanoidRootPart.Position
+    local connection = RunService.Heartbeat:Connect(function()
+        if not Recording then
+            connection:Disconnect()
+            return
+        end
+        local pos = HumanoidRootPart.Position
+        local diff = (pos - lastPos).Magnitude
+        if diff > 1 then
+            table.insert(RecordedPath, {
+                pos = {X = pos.X, Y = pos.Y, Z = pos.Z},
+                time = tick()
+            })
+            lastPos = pos
+        end
+    end)
+end
+
+local function stopRecord()
+    Recording = false
+    Rayfield:Notify({
+        Title = "Stopped",
+        Content = "Rekam jalur selesai (".. tostring(#RecordedPath) .." titik).",
+        Duration = 5,
+        Image = 4483362458
+    })
+end
+
+local function playPath()
+    if Playing or #RecordedPath == 0 then return end
+    Playing = true
+    Rayfield:Notify({Title="Play Path",Content="Memainkan jalur berjalan...",Duration=3,Image=4483362458})
+    for i, step in ipairs(RecordedPath) do
+        if not Playing then break end
+        local target = Vector3.new(step.pos.X, step.pos.Y, step.pos.Z)
+        local dist = (HumanoidRootPart.Position - target).Magnitude
+        local duration = dist / (WalkSpeed * SpeedMultiplier)
+        local startTime = tick()
+
+        while tick() - startTime < duration and Playing do
+            local alpha = (tick() - startTime) / duration
+            HumanoidRootPart.CFrame = HumanoidRootPart.CFrame:Lerp(CFrame.new(target), alpha)
+            RunService.Heartbeat:Wait()
+        end
+    end
+    Playing = false
+    Rayfield:Notify({Title="Play Selesai",Content="Jalur selesai dimainkan!",Duration=3,Image=4483362458})
+end
+
+local function stopPlay()
+    Playing = false
+    Rayfield:Notify({Title="Stopped",Content="Auto walk dihentikan",Duration=3,Image=4483362458})
+end
+
+------------------------------------------------------
+-- UI Rayfield
 ------------------------------------------------------
 local Window = Rayfield:CreateWindow({
-	Name = "Auto Path Recorder v3",
-	LoadingTitle = "Realistic Path Replay",
-	LoadingSubtitle = "by ChatGPT",
+    Name = "Auto Walk Recorder",
+    LoadingTitle = "Auto Walk",
+    LoadingSubtitle = "Recorder & Player",
+    Theme = "Default",
+    DisableRayfieldPrompts = true
 })
 
-local Tab = Window:CreateTab("Main", 4483362458)
+local Tab = Window:CreateTab("Auto Walk", 4483362458)
+Tab:CreateSection("Record & Play")
 
 Tab:CreateButton({
-	Name = "🎬 Start / Stop Record",
-	Callback = function()
-		recording = not recording
-		if recording then
-			recordedFrames = {}
-			print("🎥 Mulai merekam gerakan...")
-		else
-			print("🧾 Rekaman selesai! Frame:", #recordedFrames)
-		end
-	end
+    Name = "Mulai Rekam Jalur",
+    Callback = recordPath
 })
 
 Tab:CreateButton({
-	Name = "▶️ Play Path",
-	Callback = function()
-		if #recordedFrames == 0 then
-			warn("Belum ada rekaman.")
-			return
-		end
-		playing = true
-		currentFrame = 1
-		print("▶️ Memutar path...")
-	end
+    Name = "Stop Rekam Jalur",
+    Callback = stopRecord
 })
 
 Tab:CreateButton({
-	Name = "⏹️ Stop Play",
-	Callback = function()
-		playing = false
-		print("⏹️ Playback dihentikan.")
-	end
-})
-
-Tab:CreateInput({
-	Name = "Walk Speed",
-	PlaceholderText = tostring(walkSpeed),
-	RemoveTextAfterFocusLost = false,
-	Callback = function(value)
-		local num = tonumber(value)
-		if num then
-			walkSpeed = num
-			humanoid.WalkSpeed = num
-			print("⚙️ Speed:", walkSpeed)
-		end
-	end
+    Name = "Simpan Jalur ke File",
+    Callback = savePath
 })
 
 Tab:CreateButton({
-	Name = "💾 Save Path",
-	Callback = function()
-		if #recordedFrames == 0 then
-			warn("Tidak ada data untuk disimpan.")
-			return
-		end
-		writefile(fileName, HttpService:JSONEncode(recordedFrames))
-		print("✅ Path disimpan ke", fileName)
-	end
+    Name = "Muat Jalur dari File",
+    Callback = loadPath
 })
 
 Tab:CreateButton({
-	Name = "📂 Load Path",
-	Callback = function()
-		if isfile(fileName) then
-			local data = readfile(fileName)
-			recordedFrames = HttpService:JSONDecode(data)
-			print("📂 Path dimuat:", #recordedFrames, "frame")
-		else
-			warn("❌ File tidak ditemukan:", fileName)
-		end
-	end
+    Name = "Play Jalur",
+    Callback = playPath
 })
 
-------------------------------------------------------
--- RECORD LOOP
-------------------------------------------------------
-local lastTime = 0
-RunService.Heartbeat:Connect(function(dt)
-	if recording then
-		lastTime += dt
-		if lastTime >= frameInterval then
-			table.insert(recordedFrames, {
-				pos = {x = hrp.Position.X, y = hrp.Position.Y, z = hrp.Position.Z},
-				dir = {x = humanoid.MoveDirection.X, y = humanoid.MoveDirection.Y, z = humanoid.MoveDirection.Z},
-				jumping = humanoid:GetState() == Enum.HumanoidStateType.Jumping
-			})
-			lastTime = 0
-		end
-	end
-end)
+Tab:CreateButton({
+    Name = "Stop Jalur",
+    Callback = stopPlay
+})
 
-------------------------------------------------------
--- PLAYBACK LOOP
-------------------------------------------------------
-RunService.Heartbeat:Connect(function(dt)
-	if playing and currentFrame <= #recordedFrames then
-		local f = recordedFrames[currentFrame]
-		local nextPos = Vector3.new(f.pos.x, f.pos.y, f.pos.z)
-		local moveDir = Vector3.new(f.dir.x, f.dir.y, f.dir.z)
-
-		-- Gerakan sesuai arah
-		humanoid:Move(moveDir, false)
-
-		-- Lerp posisi sedikit agar halus
-		hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(nextPos, nextPos + moveDir), 0.25)
-
-		-- Loncat bila terekam
-		if f.jumping then
-			humanoid.Jump = true
-		end
-
-		currentFrame += 1
-	else
-		if playing and currentFrame > #recordedFrames then
-			print("✅ Path playback selesai.")
-			playing = false
-		end
-	end
-end)
+Tab:CreateSlider({
+    Name = "Speed Multiplier",
+    Range = {0.5, 5},
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Callback = function(val)
+        SpeedMultiplier = val
+    end
+})
