@@ -1,14 +1,13 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
--- === Rayfield UI ===
+-- === Rayfield ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
 	Name = "Real Recorder",
 	LoadingTitle = "Init",
-	LoadingSubtitle = "Record & Replay Real",
+	LoadingSubtitle = "Record & Replay Smooth",
 	KeySystem = false,
 })
 local Tab = Window:CreateTab("Path Tool", 4483362458)
@@ -21,9 +20,9 @@ local pathData = {}
 local playSpeed = 1
 local recordConn
 local startTime = 0
-local currentFrame = 1
+local currentIndex = 1
 
--- === Bind Character ===
+-- === Character Bind ===
 local function bindChar()
 	local char = player.Character or player.CharacterAdded:Wait()
 	hum = char:WaitForChild("Humanoid")
@@ -37,23 +36,19 @@ player.CharacterAdded:Connect(bindChar)
 ------------------------------------------------------
 local function startRecord()
 	if recording then return end
-	if playing then
-		warn("[RealRecord] Tidak bisa record saat playback berjalan.")
-		return
-	end
+	if playing then return end
 
 	recording = true
 	pathData = {}
 	startTime = tick()
 
-	print("[RealRecord] Start recording...")
+	print("[Recorder] Start recording...")
 
 	recordConn = RunService.Heartbeat:Connect(function()
 		if hrp and hum and recording then
 			table.insert(pathData, {
 				t = tick() - startTime,
 				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				dir = {hum.MoveDirection.X, hum.MoveDirection.Y, hum.MoveDirection.Z},
 				state = hum:GetState().Name
 			})
 		end
@@ -63,73 +58,66 @@ end
 local function stopRecord()
 	if not recording then return end
 	recording = false
-	if recordConn then
-		recordConn:Disconnect()
-		recordConn = nil
-	end
-	print("[RealRecord] Stop. Frames:", #pathData)
+	if recordConn then recordConn:Disconnect() recordConn = nil end
+	print("[Recorder] Stop. Frames:", #pathData)
 end
 
 ------------------------------------------------------
--- PLAYBACK
+-- PLAYBACK (natural movement)
 ------------------------------------------------------
 local function playPath()
 	if #pathData == 0 then
-		warn("[RealRecord] Tidak ada data record!")
+		warn("[Recorder] Tidak ada data record!")
 		return
 	end
 	if playing then return end
 
 	playing = true
-	currentFrame = 1
+	currentIndex = 1
 	local playStart = tick()
+	print(string.format("[Recorder] Play %d frames @ %.1fx", #pathData, playSpeed))
 
-	print(string.format("[RealRecord] Play %d frames @ %.1fx", #pathData, playSpeed))
+	task.spawn(function()
+		while playing and currentIndex < #pathData do
+			local step = pathData[currentIndex]
+			local nextStep = pathData[currentIndex + 1]
+			if not (step and nextStep) then break end
 
-	RunService.Heartbeat:Connect(function(dt)
-		if not playing or currentFrame >= #pathData then return end
+			local duration = (nextStep.t - step.t) / playSpeed
+			local startPos = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
+			local targetPos = Vector3.new(nextStep.pos[1], nextStep.pos[2], nextStep.pos[3])
 
-		local elapsed = (tick() - playStart) * playSpeed
-		local nextFrame = pathData[currentFrame + 1]
-		local thisFrame = pathData[currentFrame]
+			-- Gerakkan humanoid ke target posisi berikutnya
+			hum:MoveTo(targetPos)
 
-		if elapsed >= nextFrame.t then
-			currentFrame += 1
-		end
-
-		if hrp and hum and thisFrame and nextFrame then
-			-- Lerp posisi agar halus
-			local posA = Vector3.new(thisFrame.pos[1], thisFrame.pos[2], thisFrame.pos[3])
-			local posB = Vector3.new(nextFrame.pos[1], nextFrame.pos[2], nextFrame.pos[3])
-			local interp = math.clamp((elapsed - thisFrame.t) / (nextFrame.t - thisFrame.t), 0, 1)
-			local newPos = posA:Lerp(posB, interp)
-			hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
-
-			-- Gerakan arah
-			local dir = Vector3.new(thisFrame.dir[1], thisFrame.dir[2], thisFrame.dir[3])
-			hum:Move(dir, false)
-
-			-- Loncat jika terekam
-			if thisFrame.state == "Jumping" then
+			-- Jika titik berikutnya adalah jump
+			if step.state == "Jumping" then
 				hum.Jump = true
 			end
+
+			-- Tunggu hingga waktu frame berikutnya
+			local elapsed = 0
+			while elapsed < duration and playing do
+				RunService.Heartbeat:Wait()
+				elapsed += RunService.Heartbeat:Wait()
+			end
+
+			currentIndex += 1
 		end
 
-		-- Berhenti kalau selesai
-		if currentFrame >= #pathData then
-			playing = false
-			print("[RealRecord] Done.")
-		end
+		playing = false
+		print("[Recorder] Done.")
 	end)
 end
 
 local function stopPlay()
 	playing = false
-	print("[RealRecord] Playback dihentikan.")
+	hum:Move(Vector3.zero)
+	print("[Recorder] Playback stopped.")
 end
 
 ------------------------------------------------------
--- === UI ===
+-- UI
 ------------------------------------------------------
 Tab:CreateButton({ Name = "Start Record", Callback = startRecord })
 Tab:CreateButton({ Name = "Stop Record", Callback = stopRecord })
@@ -144,7 +132,7 @@ Tab:CreateSlider({
 	CurrentValue = 1,
 	Callback = function(v)
 		playSpeed = v
-		print("[RealRecord] Replay speed:", v.."x")
+		print("[Recorder] Replay speed:", v.."x")
 	end
 })
 
@@ -156,7 +144,6 @@ Tab:CreateSlider({
 	CurrentValue = 16,
 	Callback = function(v)
 		if hum then hum.WalkSpeed = v end
-		print("[RealRecord] WalkSpeed =", v)
 	end
 })
 
@@ -168,6 +155,5 @@ Tab:CreateSlider({
 	CurrentValue = 50,
 	Callback = function(v)
 		if hum then hum.JumpPower = v end
-		print("[RealRecord] JumpPower =", v)
 	end
 })
