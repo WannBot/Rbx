@@ -1,212 +1,128 @@
-local function loadRayfield()
-    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-end
-
-local Rayfield = loadRayfield()
+-- // LocalScript : Dot Trail Path Recorder + Saver
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
-local Player = game:GetService("Players").LocalPlayer
+local player = Players.LocalPlayer
 
--- ambil humanoid
-local function getHumanoid()
-    local char = Player.Character or Player.CharacterAdded:Wait()
-    return char:WaitForChild("Humanoid")
+--=== STATE ===--
+local hrp
+local recording = false
+local pathData = {}
+local dots = {}
+local lastPoint = tick()
+
+--=== CHARACTER BIND ===--
+local function bindChar()
+	local char = player.Character or player.CharacterAdded:Wait()
+	hrp = char:WaitForChild("HumanoidRootPart")
+end
+bindChar()
+player.CharacterAdded:Connect(bindChar)
+
+--=== VISUAL ===--
+local function createDot(position)
+	local dot = Instance.new("Part")
+	dot.Shape = Enum.PartType.Ball
+	dot.Anchored = true
+	dot.CanCollide = false
+	dot.Material = Enum.Material.Neon
+	dot.Color = Color3.fromRGB(0, 255, 0)
+	dot.Size = Vector3.new(0.4, 0.4, 0.4)
+	dot.Position = position
+	dot.Parent = workspace
+	table.insert(dots, dot)
 end
 
--- validasi key API
-local function validateKey(key)
-    local requestFunc = (http_request or request or syn and syn.request)
-    if not requestFunc then return false, "Executor tidak support http_request" end
-
-    local response = requestFunc({
-        Url = "https://botresi.xyz/keygen/api/validate.php",
-        Method = "POST",
-        Headers = {["Content-Type"] = "application/x-www-form-urlencoded"},
-        Body = "key=" .. key
-    })
-
-    if not response or not response.Body then return false, "no_response" end
-    local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
-    if not ok then return false, "invalid_response" end
-    if data.valid then return true, data else return false, data.reason or "invalid" end
+local function clearDots()
+	for _, d in ipairs(dots) do
+		if d and d.Parent then d:Destroy() end
+	end
+	dots = {}
 end
 
-------------------------------------------------------
--- UI LOGIN
-------------------------------------------------------
-local LoginWindow = Rayfield:CreateWindow({
-    Name = "Botresi Hub",
-    LoadingTitle = "Key Login",
-    LoadingSubtitle = "Gunakan key untuk masuk",
-    Theme = "Default"
+--=== RECORD ===--
+local function startRecord()
+	if recording then return end
+	recording = true
+	pathData = {}
+	clearDots()
+	print("[Dot Trail] Mulai merekam...")
+
+	RunService.Heartbeat:Connect(function()
+		if recording and hrp and (tick() - lastPoint) > 0.2 then
+			table.insert(pathData, hrp.Position)
+			createDot(hrp.Position)
+			lastPoint = tick()
+		end
+	end)
+end
+
+local function stopRecord()
+	recording = false
+	print("[Dot Trail] Rekaman berhenti. Total titik:", #pathData)
+end
+
+--=== SAVE / LOAD ===--
+local function savePath(name)
+	if #pathData == 0 then
+		warn("Belum ada jalur untuk disimpan.")
+		return
+	end
+	local json = HttpService:JSONEncode(pathData)
+	writefile(name .. ".json", json)
+	print("[Dot Trail] Jalur disimpan sebagai:", name .. ".json")
+end
+
+local function loadPath(name)
+	if not isfile(name .. ".json") then
+		warn("File tidak ditemukan:", name)
+		return
+	end
+	clearDots()
+	local json = readfile(name .. ".json")
+	local data = HttpService:JSONDecode(json)
+	print("[Dot Trail] Memuat jalur:", name, "dengan", #data, "titik")
+	for _, pos in ipairs(data) do
+		createDot(Vector3.new(pos.X, pos.Y, pos.Z))
+	end
+end
+
+--=== UI RAYFIELD ===--
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Window = Rayfield:CreateWindow({
+	Name = "Dot Trail Path Tool",
+	LoadingTitle = "Initializing",
+	LoadingSubtitle = "by ChatGPT",
+	KeySystem = false,
 })
 
-local AuthTab = LoginWindow:CreateTab("Auth 🔑", 0)
-AuthTab:CreateSection("Login Key")
+local Tab = Window:CreateTab("Dot Trail", 4483362458)
 
-local inputKeyValue = ""
-AuthTab:CreateInput({
-    Name = "Masukkan Key",
-    PlaceholderText = "Paste key di sini",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(text) inputKeyValue = text end
+Tab:CreateButton({
+	Name = "▶️ Start Record",
+	Callback = startRecord
 })
-
-local Status = AuthTab:CreateLabel("Status: idle")
-
-AuthTab:CreateButton({
-    Name = "Login",
-    Callback = function()
-        if inputKeyValue == "" then
-            Status:Set("Status: Masukkan key dulu")
-            return
-        end
-
-        Status:Set("Status: Memeriksa key...")
-        local ok, res = validateKey(inputKeyValue)
-
-        if ok then
-            Status:Set("Status: Key valid ✔")
-            task.wait(1)
-
-            Rayfield:Destroy()
-            task.wait(1)
-            Rayfield = loadRayfield()
-
-            ------------------------------------------------------
-            -- UI setelah login
-            ------------------------------------------------------
-            local MainWindow = Rayfield:CreateWindow({
-                Name = "Botresi Hub",
-                LoadingTitle = "Botresi Hub",
-                LoadingSubtitle = "Selamat Datang",
-                Theme = "Default"
-            })
-
-            local MainTab = MainWindow:CreateTab("Main", 0)
-            MainTab:CreateSection("Fitur Utama")
-            MainTab:CreateLabel("Selamat Datang, " .. Player.Name)
-            -- di dalam MainTab setelah login
-local Humanoid = getHumanoid()
-local GodModeEnabled = false
-local heartbeatConn, healthConn = nil, nil
-
-MainTab:CreateToggle({
-    Name = "God Mode",
-    CurrentValue = false,
-    Flag = "GodModeToggle",
-    Callback = function(state)
-        GodModeEnabled = state
-        if state then
-            ------------------------------------------------------
-            -- Aktifkan God Mode
-            ------------------------------------------------------
-            local char = Player.Character or Player.CharacterAdded:Wait()
-            Humanoid = char:WaitForChild("Humanoid")
-
-            -- Max Health
-            Humanoid.MaxHealth = math.huge
-            Humanoid.Health = Humanoid.MaxHealth
-
-            -- ForceField (tidak terlihat)
-            local ff = Instance.new("ForceField")
-            ff.Visible = false
-            ff.Parent = char
-
-            -- Heartbeat check
-            heartbeatConn = game:GetService("RunService").Heartbeat:Connect(function()
-                if Humanoid then
-                    Humanoid.MaxHealth = math.huge
-                    Humanoid.Health = Humanoid.MaxHealth
-                    Humanoid.PlatformStand = false -- anti ragdoll jatuh
-                end
-            end)
-
-            -- HealthChanged listener
-            healthConn = Humanoid.HealthChanged:Connect(function()
-                if Humanoid and GodModeEnabled then
-                    Humanoid.Health = Humanoid.MaxHealth
-                end
-            end)
-
-            -- Tool damage / touched parts
-            char.DescendantAdded:Connect(function(obj)
-                if GodModeEnabled and obj:IsA("TouchTransmitter") then
-                    local part = obj.Parent
-                    if part and part:IsA("BasePart") then
-                        part.CanTouch = false
-                    end
-                end
-            end)
-
-            -- Terrain anti water/lava/fire
-            workspace.Terrain.ChildAdded:Connect(function(child)
-                if GodModeEnabled and (child.Name:lower():find("lava") or child.Name:lower():find("fire") or child.Name:lower():find("water")) then
-                    child:Destroy()
-                end
-            end)
-
-        else
-            ------------------------------------------------------
-            -- Nonaktifkan God Mode
-            ------------------------------------------------------
-            if heartbeatConn then heartbeatConn:Disconnect() heartbeatConn = nil end
-            if healthConn then healthConn:Disconnect() healthConn = nil end
-
-            local char = Player.Character
-            if char then
-                local ff = char:FindFirstChildOfClass("ForceField")
-                if ff then ff:Destroy() end
-                if Humanoid then
-                    Humanoid.MaxHealth = 100
-                    Humanoid.Health = 100
-                end
-            end
-        end
-    end
+Tab:CreateButton({
+	Name = "⏹ Stop Record",
+	Callback = stopRecord
 })
-
-            ------------------------------------------------------
-            -- 🔥 Fitur Speed (Dropdown berisi On/Off + Input)
-            ------------------------------------------------------
-            local Humanoid = getHumanoid()
-            local speedEnabled = false
-            local speedValue = 16
-
-            local SpeedSection = MainTab:CreateSection("Speed")
-
-            MainTab:CreateDropdown({
-                Name = "Speed Mode",
-                Options = {"Off", "On"},
-                CurrentOption = {"Off"},
-                Callback = function(option)
-                    if option[1] == "On" then
-                        speedEnabled = true
-                        Humanoid.WalkSpeed = speedValue
-                    else
-                        speedEnabled = false
-                        Humanoid.WalkSpeed = 16
-                    end
-                end
-            })
-
-            -- Input angka di bawah dropdown Speed
-            MainTab:CreateInput({
-                Name = "Atur Speed",
-                PlaceholderText = tostring(speedValue),
-                RemoveTextAfterFocusLost = false,
-                Callback = function(text)
-                    local num = tonumber(text)
-                    if num then
-                        speedValue = math.clamp(num, 16, 200)
-                        if speedEnabled then
-                            Humanoid.WalkSpeed = speedValue
-                        end
-                    end
-                end
-            })
-
-        else
-            Status:Set("Status: Key salah (" .. tostring(res) .. ")")
-        end
-    end
+Tab:CreateInput({
+	Name = "💾 Save Jalur (masukkan nama)",
+	PlaceholderText = "contoh: trail1",
+	RemoveTextAfterFocusLost = false,
+	Callback = function(input)
+		savePath(input)
+	end
+})
+Tab:CreateInput({
+	Name = "📂 Load Jalur (nama file)",
+	PlaceholderText = "contoh: trail1",
+	RemoveTextAfterFocusLost = false,
+	Callback = function(input)
+		loadPath(input)
+	end
+})
+Tab:CreateButton({
+	Name = "🧹 Hapus Semua Titik",
+	Callback = clearDots
 })
