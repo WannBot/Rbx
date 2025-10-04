@@ -1,0 +1,168 @@
+-- LocalScript by ChatGPT (Record Path + Jump + Save/Load + Speed)
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+-- Variabel utama
+local recordedPath = {}
+local recording = false
+local playing = false
+local currentIndex = 1
+local walkSpeed = 12
+local jumpFlag = false
+local recordInterval = 0.1
+local lastRecordTime = 0
+local saveFileName = "pathrecord.json" -- nama file JSON
+
+------------------------------------------------------
+-- 🧭 GUI RAYFIELD
+------------------------------------------------------
+local Window = Rayfield:CreateWindow({
+	Name = "Auto Path Recorder v2",
+	LoadingTitle = "Path Recorder System",
+	LoadingSubtitle = "with Save/Load",
+	ConfigurationSaving = {
+		Enabled = false,
+	},
+})
+
+local TabMain = Window:CreateTab("Main", 4483362458)
+
+-- Tombol Record
+local recordButton = TabMain:CreateButton({
+	Name = "🎬 Start / Stop Record",
+	Callback = function()
+		recording = not recording
+		if recording then
+			recordedPath = {}
+			print("🎥 Mulai merekam path...")
+		else
+			print("🧾 Rekaman selesai! Total:", #recordedPath)
+		end
+	end,
+})
+
+-- Tombol Play
+local playButton = TabMain:CreateButton({
+	Name = "▶️ Play Path",
+	Callback = function()
+		if #recordedPath == 0 then
+			warn("Belum ada path terekam!")
+			return
+		end
+		print("▶️ Memutar path...")
+		playing = true
+		currentIndex = 1
+	end,
+})
+
+-- Tombol Stop
+local stopButton = TabMain:CreateButton({
+	Name = "⏹️ Stop Play",
+	Callback = function()
+		playing = false
+		print("⏹️ Berhenti memainkan path.")
+	end,
+})
+
+-- Input Speed
+local speedBox = TabMain:CreateInput({
+	Name = "Walk Speed",
+	PlaceholderText = tostring(walkSpeed),
+	RemoveTextAfterFocusLost = false,
+	Callback = function(value)
+		local num = tonumber(value)
+		if num then
+			walkSpeed = num
+			print("⚙️ Speed diatur ke:", walkSpeed)
+		else
+			warn("Masukkan angka yang valid.")
+		end
+	end,
+})
+
+-- Tombol Save Path
+local saveButton = TabMain:CreateButton({
+	Name = "💾 Save Path ke JSON",
+	Callback = function()
+		if #recordedPath == 0 then
+			warn("Belum ada path untuk disimpan!")
+			return
+		end
+		local jsonData = HttpService:JSONEncode(recordedPath)
+		writefile(saveFileName, jsonData)
+		print("✅ Path disimpan ke file:", saveFileName)
+	end,
+})
+
+-- Tombol Load Path
+local loadButton = TabMain:CreateButton({
+	Name = "📂 Load Path dari JSON",
+	Callback = function()
+		if isfile(saveFileName) then
+			local data = readfile(saveFileName)
+			recordedPath = HttpService:JSONDecode(data)
+			print("📂 Path dimuat dari file:", saveFileName)
+			print("Titik path:", #recordedPath)
+		else
+			warn("❌ File tidak ditemukan:", saveFileName)
+		end
+	end,
+})
+
+------------------------------------------------------
+-- 🪶 DETEKSI LONCAT
+------------------------------------------------------
+humanoid.Jumping:Connect(function(active)
+	if active and recording then
+		jumpFlag = true
+	end
+end)
+
+------------------------------------------------------
+-- 🔴 LOOP RECORD
+------------------------------------------------------
+RunService.Heartbeat:Connect(function(delta)
+	if recording then
+		lastRecordTime += delta
+		if lastRecordTime >= recordInterval then
+			table.insert(recordedPath, {
+				pos = {x = hrp.Position.X, y = hrp.Position.Y, z = hrp.Position.Z},
+				jump = jumpFlag
+			})
+			jumpFlag = false
+			lastRecordTime = 0
+		end
+	end
+end)
+
+------------------------------------------------------
+-- ▶️ LOOP PLAYBACK
+------------------------------------------------------
+RunService.Heartbeat:Connect(function(delta)
+	if playing and recordedPath and currentIndex <= #recordedPath then
+		local point = recordedPath[currentIndex]
+		local target = Vector3.new(point.pos.x, point.pos.y, point.pos.z)
+		local dir = (target - hrp.Position)
+		local dist = dir.Magnitude
+
+		if dist < 2 then
+			-- loncat kalau flag true
+			if point.jump then
+				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+			currentIndex += 1
+			if currentIndex > #recordedPath then
+				playing = false
+				print("✅ Selesai memainkan path.")
+			end
+		else
+			local step = dir.Unit * walkSpeed * delta
+			hrp.CFrame = hrp.CFrame + step
+		end
+	end
+end)
