@@ -1,188 +1,168 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local PathfindingService = game:GetService("PathfindingService")
-local Player = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local player = Players.LocalPlayer
 
-local Humanoid = nil
-local Root = nil
+-- === Rayfield UI ===
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Window = Rayfield:CreateWindow({
+    Name = "Real Recorder",
+    LoadingTitle = "Init",
+    LoadingSubtitle = "Record & Replay Real",
+    KeySystem = false,
+})
+local Tab = Window:CreateTab("Path Tool", 4483362458)
 
-Player.CharacterAdded:Connect(function(char)
-	Humanoid = char:WaitForChild("Humanoid")
-	Root = char:WaitForChild("HumanoidRootPart")
-end)
+-- === State ===
+local hrp, hum
+local recording = false
+local playing = false
+local pathData = {}
+local recordConn, jumpConn
+local startTime
+local playSpeed = 1 -- default 1x
 
-if Player.Character then
-	Humanoid = Player.Character:WaitForChild("Humanoid")
-	Root = Player.Character:WaitForChild("HumanoidRootPart")
+-- === Helper ===
+local function bindChar()
+    local char = player.Character or player.CharacterAdded:Wait()
+    hum = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
 end
+bindChar()
+player.CharacterAdded:Connect(bindChar)
 
-------------------------------------------------------
--- Variabel
-------------------------------------------------------
-local Recording = false
-local Playing = false
-local RecordedPath = {}
-local WalkSpeed = 16
-
-------------------------------------------------------
--- Utilitas
-------------------------------------------------------
-local function formatVec(v)
-	return string.format("%.1f, %.1f, %.1f", v.X, v.Y, v.Z)
-end
-
-local function savePath()
-	if #RecordedPath == 0 then
-		Rayfield:Notify({Title="Gagal",Content="Tidak ada jalur direkam!",Duration=4})
-		return
-	end
-	local json = HttpService:JSONEncode(RecordedPath)
-	writefile("autowalk_path.json", json)
-	Rayfield:Notify({Title="Saved",Content="Path disimpan ke autowalk_path.json",Duration=4})
-end
-
-local function loadPath()
-	if not isfile("autowalk_path.json") then
-		Rayfield:Notify({Title="Gagal",Content="File tidak ditemukan!",Duration=4})
-		return
-	end
-	local data = HttpService:JSONDecode(readfile("autowalk_path.json"))
-	RecordedPath = data
-	Rayfield:Notify({Title="Loaded",Content="Berhasil memuat "..#RecordedPath.." titik.",Duration=4})
-end
-
-------------------------------------------------------
--- Record
-------------------------------------------------------
+-- === Record Path ===
 local function startRecord()
-	if Recording then return end
-	Recording = true
-	RecordedPath = {}
-	Rayfield:Notify({Title="Recording",Content="Mulai merekam jalur...",Duration=4})
+    if recording then return end
+    recording = true
+    pathData = {}
+    startTime = tick()
+    print("[RealRecord] Start recording...")
 
-	local lastPos = Root.Position
-	RunService.Heartbeat:Connect(function()
-		if not Recording or not Root then return end
-		local pos = Root.Position
-		if (pos - lastPos).Magnitude > 2 then
-			table.insert(RecordedPath,{X=pos.X,Y=pos.Y,Z=pos.Z})
-			lastPos = pos
-		end
-	end)
+    recordConn = RunService.Heartbeat:Connect(function()
+        if recording and hrp then
+            table.insert(pathData, {
+                t = tick() - startTime,
+                pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+                vel = hum.MoveDirection.Magnitude,
+                type = "move"
+            })
+        end
+    end)
+
+    jumpConn = hum.StateChanged:Connect(function(_, new)
+        if recording and new == Enum.HumanoidStateType.Jumping then
+            table.insert(pathData, {
+                t = tick() - startTime,
+                pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+                vel = 0,
+                type = "jump"
+            })
+        end
+    end)
 end
 
 local function stopRecord()
-	Recording = false
-	Rayfield:Notify({Title="Stop",Content="Rekam berhenti. Total "..#RecordedPath.." titik.",Duration=4})
+    if not recording then return end
+    recording = false
+    if recordConn then recordConn:Disconnect() recordConn = nil end
+    if jumpConn then jumpConn:Disconnect() jumpConn = nil end
+    print("[RealRecord] Stop. Frames:", #pathData)
 end
 
-------------------------------------------------------
--- Pathfinding realistic walk
-------------------------------------------------------
-local function moveToPoint(target)
-	if not Humanoid or not Root then return end
-	local path = PathfindingService:CreatePath({
-		AgentRadius = 2,
-		AgentHeight = 5,
-		AgentCanJump = true
-	})
-	path:ComputeAsync(Root.Position, target)
-
-	for _, waypoint in ipairs(path:GetWaypoints()) do
-		if not Playing then break end
-		Humanoid:MoveTo(waypoint.Position)
-		if waypoint.Action == Enum.PathWaypointAction.Jump then
-			Humanoid.Jump = true
-		end
-		Humanoid.MoveToFinished:Wait()
-	end
-end
-
-------------------------------------------------------
--- Replay (natural walk)
-------------------------------------------------------
+-- === Play Path ===
 local function playPath()
-	if #RecordedPath == 0 then
-		Rayfield:Notify({Title="Error",Content="Tidak ada path tersimpan!",Duration=4})
-		return
-	end
-	if Playing then return end
-	Playing = true
-	Rayfield:Notify({Title="Play",Content="Memulai auto walk...",Duration=3})
+    if #pathData == 0 then
+        warn("[RealRecord] Tidak ada data record!")
+        return
+    end
+    if playing then return end
+    playing = true
+    print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
 
-	Humanoid.WalkSpeed = WalkSpeed
+    task.spawn(function()
+        local playStart = tick()
+        local i = 1
+        while playing and i <= #pathData do
+            local step = pathData[i]
+            local elapsed = (tick() - playStart) * playSpeed
 
-	for i, pos in ipairs(RecordedPath) do
-		if not Playing then break end
-		local vec = Vector3.new(pos.X,pos.Y,pos.Z)
-		moveToPoint(vec)
-	end
-
-	Playing = false
-	Rayfield:Notify({Title="Selesai",Content="Auto walk selesai!",Duration=4})
+            if elapsed >= step.t then
+                if step.type == "move" then
+                    local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
+                    hum:MoveTo(target)
+                elseif step.type == "jump" then
+                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+                i = i + 1
+            else
+                task.wait(0.01)
+            end
+        end
+        playing = false
+        print("[RealRecord] Done.")
+    end)
 end
 
 local function stopPlay()
-	Playing = false
-	Humanoid:Move(Vector3.zero)
-	Rayfield:Notify({Title="Stopped",Content="Auto walk dihentikan.",Duration=3})
+    playing = false
+    if hum then hum:Move(Vector3.new(0,0,0)) end
+    print("[RealRecord] Play stopped.")
 end
 
-------------------------------------------------------
--- UI
-------------------------------------------------------
-local Window = Rayfield:CreateWindow({
-	Name = "Auto Walk Recorder",
-	LoadingTitle = "Realistic Walk",
-	LoadingSubtitle = "Record & Replay",
-	Theme = "Default"
-})
-
-local Tab = Window:CreateTab("Auto Walk", 4483362458)
-Tab:CreateSection("Record & Replay")
-
+-- === UI ===
 Tab:CreateButton({
-	Name = "Mulai Rekam Jalur",
-	Callback = startRecord
+    Name = "Start Record",
+    Callback = startRecord
 })
 
 Tab:CreateButton({
-	Name = "Stop Rekam Jalur",
-	Callback = stopRecord
+    Name = "Stop Record",
+    Callback = stopRecord
 })
 
 Tab:CreateButton({
-	Name = "Simpan Jalur ke File",
-	Callback = savePath
+    Name = "Play Last Record",
+    Callback = playPath
 })
 
 Tab:CreateButton({
-	Name = "Muat Jalur dari File",
-	Callback = loadPath
-})
-
-Tab:CreateButton({
-	Name = "Play Jalur (Realistic)",
-	Callback = playPath
-})
-
-Tab:CreateButton({
-	Name = "Stop Auto Walk",
-	Callback = stopPlay
+    Name = "Stop Play",
+    Callback = stopPlay
 })
 
 Tab:CreateSlider({
-	Name = "WalkSpeed",
-	Range = {8, 32},
-	Increment = 1,
-	CurrentValue = 16,
-	Suffix = " speed",
-	Callback = function(v)
-		WalkSpeed = v
-		if Humanoid then
-			Humanoid.WalkSpeed = v
-		end
-	end
+    Name = "Replay Speed",
+    Range = {0.5, 3}, -- 0.5x sampai 3x
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Callback = function(v)
+        playSpeed = v
+        print("[RealRecord] Replay speed diatur:", v.."x")
+    end
+})
+
+Tab:CreateSlider({
+    Name = "WalkSpeed",
+    Range = {10, 200}, -- normal 16
+    Increment = 1,
+    Suffix = " ws",
+    CurrentValue = 16,
+    Callback = function(v)
+        if hum then hum.WalkSpeed = v end
+        print("[RealRecord] WalkSpeed =", v)
+    end
+})
+
+Tab:CreateSlider({
+    Name = "JumpPower",
+    Range = {10, 300}, -- normal 50
+    Increment = 1,
+    Suffix = " jp",
+    CurrentValue = 50,
+    Callback = function(v)
+        if hum then hum.JumpPower = v end
+        print("[RealRecord] JumpPower =", v)
+    end
 })
