@@ -1,128 +1,101 @@
--- // LocalScript : Dot Trail Path Recorder + Saver
+-- // LocalScript: Tap To Walk with Dot Path Visualization
 local Players = game:GetService("Players")
+local PathfindingService = game:GetService("PathfindingService")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+
 local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+local hrp = char:WaitForChild("HumanoidRootPart")
 
 --=== STATE ===--
-local hrp
-local recording = false
-local pathData = {}
-local dots = {}
-local lastPoint = tick()
-
---=== CHARACTER BIND ===--
-local function bindChar()
-	local char = player.Character or player.CharacterAdded:Wait()
-	hrp = char:WaitForChild("HumanoidRootPart")
-end
-bindChar()
-player.CharacterAdded:Connect(bindChar)
+local activePath = nil
+local pathDots = {}
+local moving = false
 
 --=== VISUAL ===--
-local function createDot(position)
-	local dot = Instance.new("Part")
-	dot.Shape = Enum.PartType.Ball
-	dot.Anchored = true
-	dot.CanCollide = false
-	dot.Material = Enum.Material.Neon
-	dot.Color = Color3.fromRGB(0, 255, 0)
-	dot.Size = Vector3.new(0.4, 0.4, 0.4)
-	dot.Position = position
-	dot.Parent = workspace
-	table.insert(dots, dot)
-end
-
 local function clearDots()
-	for _, d in ipairs(dots) do
+	for _, d in ipairs(pathDots) do
 		if d and d.Parent then d:Destroy() end
 	end
-	dots = {}
+	pathDots = {}
 end
 
---=== RECORD ===--
-local function startRecord()
-	if recording then return end
-	recording = true
-	pathData = {}
+local function showPath(waypoints)
 	clearDots()
-	print("[Dot Trail] Mulai merekam...")
+	for _, wp in ipairs(waypoints) do
+		local dot = Instance.new("Part")
+		dot.Shape = Enum.PartType.Ball
+		dot.Anchored = true
+		dot.CanCollide = false
+		dot.Material = Enum.Material.Neon
+		dot.Color = Color3.fromRGB(0, 255, 0)
+		dot.Size = Vector3.new(0.4, 0.4, 0.4)
+		dot.Position = wp.Position + Vector3.new(0, 0.2, 0)
+		dot.Parent = workspace
+		table.insert(pathDots, dot)
+	end
+end
 
-	RunService.Heartbeat:Connect(function()
-		if recording and hrp and (tick() - lastPoint) > 0.2 then
-			table.insert(pathData, hrp.Position)
-			createDot(hrp.Position)
-			lastPoint = tick()
+--=== PATHFINDING ===--
+local function moveToPoint(position)
+	local path = PathfindingService:CreatePath({
+		AgentRadius = 2,
+		AgentHeight = 5,
+		AgentCanJump = true
+	})
+	path:ComputeAsync(hrp.Position, position)
+
+	if path.Status == Enum.PathStatus.Success then
+		activePath = path
+		showPath(path:GetWaypoints())
+
+		moving = true
+		for _, waypoint in ipairs(path:GetWaypoints()) do
+			if not moving then break end
+			hum:MoveTo(waypoint.Position)
+			hum.MoveToFinished:Wait()
+			if waypoint.Action == Enum.PathWaypointAction.Jump then
+				hum:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
 		end
-	end)
-end
-
-local function stopRecord()
-	recording = false
-	print("[Dot Trail] Rekaman berhenti. Total titik:", #pathData)
-end
-
---=== SAVE / LOAD ===--
-local function savePath(name)
-	if #pathData == 0 then
-		warn("Belum ada jalur untuk disimpan.")
-		return
+	else
+		warn("Gagal menghitung jalur ke lokasi tersebut.")
 	end
-	local json = HttpService:JSONEncode(pathData)
-	writefile(name .. ".json", json)
-	print("[Dot Trail] Jalur disimpan sebagai:", name .. ".json")
+	moving = false
 end
 
-local function loadPath(name)
-	if not isfile(name .. ".json") then
-		warn("File tidak ditemukan:", name)
-		return
+--=== INPUT ===--
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		local mouse = player:GetMouse()
+		local targetPos = mouse.Hit and mouse.Hit.p
+		if targetPos then
+			moveToPoint(targetPos)
+		end
 	end
-	clearDots()
-	local json = readfile(name .. ".json")
-	local data = HttpService:JSONDecode(json)
-	print("[Dot Trail] Memuat jalur:", name, "dengan", #data, "titik")
-	for _, pos in ipairs(data) do
-		createDot(Vector3.new(pos.X, pos.Y, pos.Z))
-	end
-end
+end)
 
---=== UI RAYFIELD ===--
+--=== UI (RAYFIELD) ===--
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-	Name = "Dot Trail Path Tool",
-	LoadingTitle = "Initializing",
-	LoadingSubtitle = "by ChatGPT",
-	KeySystem = false,
+	Name = "Path Visualizer",
+	LoadingTitle = "Tap to Walk",
+	LoadingSubtitle = "Path Dot Visual",
+	KeySystem = false
 })
 
-local Tab = Window:CreateTab("Dot Trail", 4483362458)
-
+local Tab = Window:CreateTab("Path Control", 4483362458)
 Tab:CreateButton({
-	Name = "▶️ Start Record",
-	Callback = startRecord
-})
-Tab:CreateButton({
-	Name = "⏹ Stop Record",
-	Callback = stopRecord
-})
-Tab:CreateInput({
-	Name = "💾 Save Jalur (masukkan nama)",
-	PlaceholderText = "contoh: trail1",
-	RemoveTextAfterFocusLost = false,
-	Callback = function(input)
-		savePath(input)
-	end
-})
-Tab:CreateInput({
-	Name = "📂 Load Jalur (nama file)",
-	PlaceholderText = "contoh: trail1",
-	RemoveTextAfterFocusLost = false,
-	Callback = function(input)
-		loadPath(input)
-	end
-})
-Tab:CreateButton({
-	Name = "🧹 Hapus Semua Titik",
+	Name = "🧹 Clear Path Dots",
 	Callback = clearDots
+})
+Tab:CreateToggle({
+	Name = "⏹ Stop Movement",
+	CurrentValue = false,
+	Callback = function(state)
+		moving = not state
+	end
 })
