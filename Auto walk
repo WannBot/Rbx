@@ -20,8 +20,8 @@ local playing = false
 local pathData = {}
 local recordConn, jumpConn
 local startTime
-local playSpeed = 1
-local saveFile = "pathrecord.json"
+local playSpeed = 1 -- default 1x
+local saveFile = "pathrecord.json" -- nama file JSON
 
 -- === Helper ===
 local function bindChar()
@@ -32,16 +32,9 @@ end
 bindChar()
 player.CharacterAdded:Connect(bindChar)
 
-------------------------------------------------------
--- === RECORD PATH ===
-------------------------------------------------------
+-- === Record Path ===
 local function startRecord()
 	if recording then return end
-	if playing then
-		warn("[RealRecord] Stop playback dulu sebelum record!")
-		return
-	end
-
 	recording = true
 	pathData = {}
 	startTime = tick()
@@ -78,53 +71,47 @@ local function stopRecord()
 	print("[RealRecord] Stop. Frames:", #pathData)
 end
 
-------------------------------------------------------
--- === PLAY PATH (tanpa delay, smooth) ===
-------------------------------------------------------
+-- === Play Path ===
 local function playPath()
 	if #pathData == 0 then
 		warn("[RealRecord] Tidak ada data record!")
 		return
 	end
 	if playing then return end
-
 	playing = true
-	local playStart = tick()
-	local i = 1
-	print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed .. "x")
+	print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
 
-	RunService.Heartbeat:Connect(function(delta)
-		if not playing then return end
-		local elapsed = (tick() - playStart) * playSpeed
-
-		while i <= #pathData and elapsed >= pathData[i].t do
+	task.spawn(function()
+		local playStart = tick()
+		local i = 1
+		while playing and i <= #pathData do
 			local step = pathData[i]
-			if step.type == "move" then
-				local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
-				-- MoveTo agar tetap animasi jalan
-				hum:MoveTo(target)
-			elseif step.type == "jump" then
-				hum:ChangeState(Enum.HumanoidStateType.Jumping)
-			end
-			i += 1
-		end
+			local elapsed = (tick() - playStart) * playSpeed
 
-		if i > #pathData then
-			playing = false
-			print("[RealRecord] Done.")
+			if elapsed >= step.t then
+				if step.type == "move" then
+					local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
+					hum:MoveTo(target)
+				elseif step.type == "jump" then
+					hum:ChangeState(Enum.HumanoidStateType.Jumping)
+				end
+				i = i + 1
+			else
+				task.wait(0.01)
+			end
 		end
+		playing = false
+		print("[RealRecord] Done.")
 	end)
 end
 
 local function stopPlay()
 	playing = false
-	if hum then hum:Move(Vector3.zero) end
+	if hum then hum:Move(Vector3.new(0,0,0)) end
 	print("[RealRecord] Play stopped.")
 end
 
-------------------------------------------------------
 -- === SAVE / LOAD PATH ===
-------------------------------------------------------
 local function savePath()
 	if #pathData == 0 then
 		warn("[RealRecord] Tidak ada data untuk disimpan!")
@@ -132,7 +119,7 @@ local function savePath()
 	end
 	local json = HttpService:JSONEncode(pathData)
 	writefile(saveFile, json)
-	print("[RealRecord] Path disimpan ke:", saveFile, " | Frames:", #pathData)
+	print("[RealRecord] Path disimpan ke file:", saveFile, "| Frames:", #pathData)
 end
 
 local function loadPath()
@@ -145,39 +132,53 @@ local function loadPath()
 	print("[RealRecord] Path dimuat dari:", saveFile, "| Frames:", #pathData)
 end
 
-------------------------------------------------------
 -- === UI ===
-------------------------------------------------------
-Tab:CreateButton({ Name = "Start Record", Callback = startRecord })
-Tab:CreateButton({ Name = "Stop Record", Callback = stopRecord })
-Tab:CreateButton({ Name = "Play Last Record", Callback = playPath })
-Tab:CreateButton({ Name = "Stop Play", Callback = stopPlay })
+Tab:CreateButton({
+	Name = "Start Record",
+	Callback = startRecord
+})
 
 Tab:CreateButton({
-	Name = "💾 Save Path to JSON",
+	Name = "Stop Record",
+	Callback = stopRecord
+})
+
+Tab:CreateButton({
+	Name = "Play Last Record",
+	Callback = playPath
+})
+
+Tab:CreateButton({
+	Name = "Stop Play",
+	Callback = stopPlay
+})
+
+-- Tombol tambahan Save / Load JSON
+Tab:CreateButton({
+	Name = "💾 Save Path ke JSON",
 	Callback = savePath
 })
 
 Tab:CreateButton({
-	Name = "📂 Load Path from JSON",
+	Name = "📂 Load Path dari JSON",
 	Callback = loadPath
 })
 
 Tab:CreateSlider({
 	Name = "Replay Speed",
-	Range = {0.5, 3},
+	Range = {0.5, 3}, -- 0.5x sampai 3x
 	Increment = 0.1,
 	Suffix = "x",
 	CurrentValue = 1,
 	Callback = function(v)
 		playSpeed = v
-		print("[RealRecord] Replay speed diatur:", v .. "x")
+		print("[RealRecord] Replay speed diatur:", v.."x")
 	end
 })
 
 Tab:CreateSlider({
 	Name = "WalkSpeed",
-	Range = {10, 200},
+	Range = {10, 200}, -- normal 16
 	Increment = 1,
 	Suffix = " ws",
 	CurrentValue = 16,
@@ -189,7 +190,7 @@ Tab:CreateSlider({
 
 Tab:CreateSlider({
 	Name = "JumpPower",
-	Range = {10, 300},
+	Range = {10, 300}, -- normal 50
 	Increment = 1,
 	Suffix = " jp",
 	CurrentValue = 50,
