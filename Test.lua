@@ -1,12 +1,26 @@
--- // LocalScript: Manual Path Maker + Saver
+-- // LocalScript: Manual Path Maker + Play/Stop + Double Tap Protection
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+
 local player = Players.LocalPlayer
+local hum, hrp
+
+local function bindChar()
+	local char = player.Character or player.CharacterAdded:Wait()
+	hum = char:WaitForChild("Humanoid")
+	hrp = char:WaitForChild("HumanoidRootPart")
+end
+bindChar()
+player.CharacterAdded:Connect(bindChar)
 
 --=== STATE ===--
 local pathPoints = {}
 local dots = {}
+local addingMode = false
+local playing = false
+local lastClickTime = 0
 
 --=== VISUAL ===--
 local function createDot(position)
@@ -27,7 +41,6 @@ local function clearDots()
 		if d and d.Parent then d:Destroy() end
 	end
 	dots = {}
-	pathPoints = {}
 end
 
 local function redrawDots()
@@ -37,17 +50,21 @@ local function redrawDots()
 	end
 end
 
---=== INPUT CLICK ===--
+--=== DOUBLE CLICK DETECTION ===--
 UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
+	if processed or not addingMode then return end
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		local mouse = player:GetMouse()
-		if mouse.Target then
-			local pos = mouse.Hit.p
-			table.insert(pathPoints, pos)
-			createDot(pos)
-			print("Titik ditambahkan:", pos)
+		local now = tick()
+		if now - lastClickTime < 0.3 then -- klik dua kali cepat
+			local mouse = player:GetMouse()
+			if mouse.Target then
+				local pos = mouse.Hit.p
+				table.insert(pathPoints, pos)
+				createDot(pos)
+				print("✅ Titik ditambahkan:", pos)
+			end
 		end
+		lastClickTime = now
 	end
 end)
 
@@ -61,9 +78,8 @@ local function savePath(name)
 	for _, v in ipairs(pathPoints) do
 		table.insert(simple, {X = v.X, Y = v.Y, Z = v.Z})
 	end
-	local json = HttpService:JSONEncode(simple)
-	writefile(name .. ".json", json)
-	print("[PathMaker] Jalur disimpan ke", name .. ".json")
+	writefile(name .. ".json", HttpService:JSONEncode(simple))
+	print("[PathMaker] Jalur disimpan:", name .. ".json")
 end
 
 local function loadPath(name)
@@ -71,14 +87,34 @@ local function loadPath(name)
 		warn("File tidak ditemukan:", name)
 		return
 	end
-	local json = readfile(name .. ".json")
-	local data = HttpService:JSONDecode(json)
+	local data = HttpService:JSONDecode(readfile(name .. ".json"))
 	pathPoints = {}
 	for _, p in ipairs(data) do
 		table.insert(pathPoints, Vector3.new(p.X, p.Y, p.Z))
 	end
-	print("[PathMaker] Jalur dimuat, total titik:", #pathPoints)
+	print("[PathMaker] Jalur dimuat:", #pathPoints, "titik")
 	redrawDots()
+end
+
+--=== PLAY PATH ===--
+local function playPath()
+	if playing or #pathPoints == 0 then return end
+	print("[PathMaker] Mulai Play Path...")
+	playing = true
+	for _, pos in ipairs(pathPoints) do
+		if not playing then break end
+		hum:MoveTo(pos)
+		hum.MoveToFinished:Wait()
+	end
+	playing = false
+end
+
+local function stopPath()
+	if playing then
+		playing = false
+		hum:Move(Vector3.zero)
+		print("[PathMaker] Play dihentikan.")
+	end
 end
 
 local function undoLast()
@@ -89,36 +125,55 @@ local function undoLast()
 	end
 end
 
---=== UI (RAYFIELD) ===--
+--=== UI RAYFIELD ===--
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
-	Name = "Manual Path Maker",
-	LoadingTitle = "Init",
-	LoadingSubtitle = "Custom Path Creator",
+	Name = "Manual Path Builder v2",
+	LoadingTitle = "Path Builder",
+	LoadingSubtitle = "Double Tap + Play Test",
 	KeySystem = false
 })
 
-local Tab = Window:CreateTab("Path Builder", 4483362458)
+local Tab = Window:CreateTab("Path Editor", 4483362458)
 
+Tab:CreateToggle({
+	Name = "🟢 Mode Tambah Titik (Double Tap)",
+	CurrentValue = false,
+	Callback = function(state)
+		addingMode = state
+		print("Mode tambah titik:", state and "Aktif" or "Nonaktif")
+	end
+})
+Tab:CreateButton({
+	Name = "▶️ Play Path",
+	Callback = playPath
+})
+Tab:CreateButton({
+	Name = "⏹ Stop Path",
+	Callback = stopPath
+})
 Tab:CreateButton({
 	Name = "↩️ Undo Titik Terakhir",
 	Callback = undoLast
 })
 Tab:CreateButton({
 	Name = "🧹 Clear Semua Titik",
-	Callback = clearDots
+	Callback = function()
+		pathPoints = {}
+		clearDots()
+	end
 })
 Tab:CreateInput({
-	Name = "💾 Save Jalur (nama file)",
-	PlaceholderText = "contoh: jalur1",
+	Name = "💾 Save Jalur",
+	PlaceholderText = "contoh: path1",
 	RemoveTextAfterFocusLost = false,
 	Callback = function(input)
 		savePath(input)
 	end
 })
 Tab:CreateInput({
-	Name = "📂 Load Jalur (nama file)",
-	PlaceholderText = "contoh: jalur1",
+	Name = "📂 Load Jalur",
+	PlaceholderText = "contoh: path1",
 	RemoveTextAfterFocusLost = false,
 	Callback = function(input)
 		loadPath(input)
