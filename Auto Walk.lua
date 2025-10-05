@@ -23,7 +23,7 @@ screenGui.Name = "MovementRecorderGui"
 local frame = Instance.new("Frame")
 frame.Parent = screenGui
 frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-frame.Size = UDim2.new(0, 220, 0, 200)
+frame.Size = UDim2.new(0, 220, 0, 300)
 frame.Position = UDim2.new(0.5, -110, 0.5, -100)
 frame.Active = true
 frame.Draggable = true
@@ -177,8 +177,8 @@ statusLabel.TextScaled = true
 -- Create Scrollable List
 local scrollFrame = Instance.new("ScrollingFrame")
 scrollFrame.Parent = frame
-scrollFrame.Size = UDim2.new(0, 200, 0, 70)
-scrollFrame.Position = UDim2.new(0, 10, 0, 100)
+scrollFrame.Size = UDim2.new(0, 200, 0, 80)
+scrollFrame.Position = UDim2.new(0, 10, 0, 140)
 scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0) -- Dynamically adjusted
 scrollFrame.ScrollBarThickness = 8
 
@@ -966,32 +966,32 @@ end)
 
 -- TextLabel for instructions
 local pasteLabel = Instance.new("TextLabel")
-pasteLabel.Parent = screenGui
+pasteLabel.Parent = frame
 pasteLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-pasteLabel.Size = UDim2.new(0, 200, 0, 30)
-pasteLabel.Position = UDim2.new(0, 10, 0, 140) -- Adjust position as needed
+pasteLabel.Size = UDim2.new(0, 200, 0, 20)
+pasteLabel.Position = UDim2.new(0, 10, 0, 230)
 pasteLabel.Text = "Paste Platform Data Here"
 pasteLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
 pasteLabel.TextScaled = true
 
 -- TextBox for pasting platform data
 local pasteTextBox = Instance.new("TextBox")
-pasteTextBox.Parent = screenGui
+pasteTextBox.Parent = frame
 pasteTextBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-pasteTextBox.Size = UDim2.new(0, 200, 0, 50)
-pasteTextBox.Position = UDim2.new(0, 10, 0, 170) -- Adjust position as needed
+pasteTextBox.Size = UDim2.new(0, 200, 0, 30)
+pasteTextBox.Position = UDim2.new(0, 10, 0, 255)
 pasteTextBox.Text = ""
 pasteTextBox.PlaceholderText = "Paste JSON data here"
 pasteTextBox.ClearTextOnFocus = false
 pasteTextBox.MultiLine = true
 pasteTextBox.TextScaled = true
 
--- Load Button: Paste and deserialize platform data from the TextBox
+-- Load Button: Paste and deserialize platform data
 local loadButton = Instance.new("TextButton")
-loadButton.Parent = screenGui
+loadButton.Parent = frame
 loadButton.BackgroundColor3 = Color3.fromRGB(255, 255, 100)
-loadButton.Size = UDim2.new(0, 90, 0, 30)
-loadButton.Position = UDim2.new(0, 10, 0, 230) -- Adjust position as needed
+loadButton.Size = UDim2.new(0, 90, 0, 25)
+loadButton.Position = UDim2.new(0, 10, 0, 290)
 loadButton.Text = "Load"
 loadButton.TextScaled = true
 
