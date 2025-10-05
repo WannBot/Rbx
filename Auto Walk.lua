@@ -901,6 +901,38 @@ saveButton.Text = "Save"
 saveButton.TextScaled = true
 
 saveButton.MouseButton1Click:Connect(function()
+
+-- === Tombol Save ke File JSON ===
+local saveToFileButton = Instance.new("TextButton")
+saveToFileButton.Parent = frame
+saveToFileButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+saveToFileButton.Size = UDim2.new(0, 200, 0, 30)
+saveToFileButton.Position = UDim2.new(0, 10, 0, 170)
+saveToFileButton.Text = "💾 Save Path to File"
+saveToFileButton.TextScaled = true
+
+saveToFileButton.MouseButton1Click:Connect(function()
+    local folderPath = "AutoWalk"
+    if not isfolder(folderPath) then
+        makefolder(folderPath)
+    end
+
+    local jsonData = serializePlatformData()
+    local fileName = folderPath.."/AutoWalk_Session_"..tostring(os.time())..".json"
+    local success, err = pcall(function()
+        writefile(fileName, jsonData)
+    end)
+
+    if success then
+        statusLabel.Text = "✅ Saved: "..fileName
+        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+    else
+        statusLabel.Text = "❌ Save Failed"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        warn("Save failed:", err)
+    end
+end)
+		
 -- First, serialize all platform data
 local jsonData = serializePlatformData()
 
