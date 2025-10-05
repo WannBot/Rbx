@@ -73,7 +73,83 @@ local function stopRecord()
 end
 
 -- === Play Path (BodyVelocity) ===
-local function ensureBV()
+local function playPath()
+	if #pathData == 0 then
+		warn("[RealRecord] Tidak ada data record!")
+		return
+	end
+	if playing then return end
+	if not hrp or not hum then
+		warn("[RealRecord] Character belum siap.")
+		return
+	end
+
+	if recording then stopRecord() end
+	playing = true
+	print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
+
+	-- siapkan BodyVelocity
+	if BV then BV:Destroy() end
+	BV = Instance.new("BodyVelocity")
+	BV.MaxForce = Vector3.new(1e5, 0, 1e5)
+	BV.P = 1e4
+	BV.Velocity = Vector3.zero
+	BV.Parent = hrp
+
+	local playStart = tick()
+	local i = 1
+
+	-- pastikan orientasi normal di awal
+	hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + hrp.CFrame.LookVector)
+
+	if playConn then playConn:Disconnect() end
+
+	playConn = RunService.Heartbeat:Connect(function(delta)
+		if not playing then return end
+		local elapsed = (tick() - playStart) * playSpeed
+
+		while i <= #pathData and elapsed >= pathData[i].t do
+			local step = pathData[i]
+
+			-- Loncat manual
+			if step.type == "jump" then
+				hum.Jump = true
+			end
+			i += 1
+		end
+
+		if i > #pathData then
+			BV.Velocity = Vector3.zero
+			BV:Destroy()
+			BV = nil
+			playing = false
+			if playConn then playConn:Disconnect() end
+			print("[RealRecord] Done.")
+			return
+		end
+
+		-- Gerak ke target berikutnya
+		local stepNow = pathData[i]
+		if stepNow and stepNow.type == "move" then
+			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
+			local dir = (target - hrp.Position)
+			local horizontal = Vector3.new(dir.X, 0, dir.Z)
+			local dist = horizontal.Magnitude
+			local baseSpeed = hum.WalkSpeed * playSpeed
+
+			if dist > 0.5 then
+				local moveDir = horizontal.Unit * baseSpeed
+				BV.Velocity = Vector3.new(moveDir.X, 0, moveDir.Z)
+
+				-- rotasi avatar menghadap arah gerak
+				local lookAtPos = hrp.Position + horizontal
+				hrp.CFrame = CFrame.lookAt(hrp.Position, lookAtPos)
+			else
+				BV.Velocity = Vector3.zero
+			end
+		end
+	end)
+endlocal function ensureBV()
 	-- create BodyVelocity if not exists
 	if not BV or not BV.Parent then
 		BV = Instance.new("BodyVelocity")
@@ -98,89 +174,7 @@ local function cleanupBV()
 	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
 end
 
-local function playPath()
-	if #pathData == 0 then
-		warn("[RealRecord] Tidak ada data record!")
-		return
-	end
-	if playing then return end
-	if not hrp or not hum then
-		warn("[RealRecord] Character belum siap.")
-		return
-	end
 
-	-- disable recording while playing
-	if recording then stopRecord() end
-
-	playing = true
-	print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
-
-	-- siapkan BV
-	ensureBV()
-
-	local playStart = tick()
-	local i = 1
-
-	-- jika sudah ada koneksi playConn sebelumnya, disconnect
-	if playConn then
-		playConn:Disconnect()
-		playConn = nil
-	end
-
-	playConn = RunService.Heartbeat:Connect(function(delta)
-		if not playing then return end
-		local elapsed = (tick() - playStart) * playSpeed
-
-		-- proses semua step yang waktunya sudah lewat (bisa lebih dari 1)
-		while i <= #pathData and elapsed >= pathData[i].t do
-			local step = pathData[i]
-			-- untuk jump kita lakukan hum.Jump (agar humanoid bereaksi normal)
-			if step.type == "jump" then
-				-- set jump true; ChangeState kadang juga bisa dipakai
-				hum.Jump = true
-			end
-			-- next step akan di-handle di loop BV di bawah
-			i = i + 1
-		end
-
-		-- jika sudah mencapai akhir
-		if i > #pathData then
-			-- hentikan BV dan stop playback
-			cleanupBV()
-			playing = false
-			print("[RealRecord] Done.")
-			if playConn then playConn:Disconnect() playConn = nil end
-			return
-		end
-
-		-- sekarang target adalah posisi step i (posisi yang ingin kita capai sekarang)
-		local stepNow = pathData[i]
-		if stepNow and stepNow.type == "move" then
-			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
-			local dir = (target - hrp.Position)
-			local horizontal = Vector3.new(dir.X, 0, dir.Z)
-			local dist = horizontal.Magnitude
-
-			-- prefer gunakan WalkSpeed/current hum.WalkSpeed sebagai basis speed
-			local baseSpeed = (hum and hum.WalkSpeed) and hum.WalkSpeed or 16
-			local desiredSpeed = baseSpeed * playSpeed
-
-			if dist > 0.8 then
-				-- atur BV ke arah target (jaga Y velocity agar gravity tetap bekerja)
-				local velY = hrp.AssemblyLinearVelocity and hrp.AssemblyLinearVelocity.Y or 0
-				local newVel = horizontal.Unit * desiredSpeed
-				BV.Velocity = Vector3.new(newVel.X, 0, newVel.Z)
-			else
-				-- sudah dekat target: stop BV sedikit supaya tidak overshoot
-				BV.Velocity = Vector3.zero
-				-- advance ke next frame (biarkan loop while di atas menangani increment berdasarkan waktu)
-			end
-		else
-			-- jika bukan move (misal pas step sekarang adalah jump karena sequence), biarkan BV nol
-			BV.Velocity = Vector3.zero
-		end
-	end)
-end
 
 local function stopPlay()
 	if not playing then
