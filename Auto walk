@@ -1,79 +1,85 @@
--- //==================================================\\
--- ||            AUTO WALK RECORDER V4 (Rayfield)     ||
--- ||         By ChatGPT Custom Build - Blue UI        ||
--- \\==================================================//
+-- ============ Auto Walk Recorder V4 - Fixed Start & Smooth Replay ============
+-- Rayfield UI tetap, platform merah/kuning tetap, struktur V4
+-- Perbaikan: snap titik awal ke tanah, pathfind ke platform sebelum replay,
+-- playback halus pakai BodyVelocity + timing rekaman, orientasi lookAt,
+-- opsi DevShield saat replay (off by default).
 
 -- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
--- Load Rayfield UI
+-- Rayfield
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-
 local Window = Rayfield:CreateWindow({
 	Name = "Auto Walk Recorder V4",
-	LoadingTitle = "Initializing Auto Walk System",
-	LoadingSubtitle = "By ChatGPT Custom Build",
-	ConfigurationSaving = {Enabled = false},
+	LoadingTitle = "Init",
+	LoadingSubtitle = "Record • Replay • Save • Load",
 	KeySystem = false
 })
-
--- Tabs
 local tabRecord = Window:CreateTab("🎥 Record", 4483362458)
-local tabSave = Window:CreateTab("💾 Save / Load", 4483362458)
+local tabSave   = Window:CreateTab("💾 Save / Load", 4483362458)
+local tabOpts   = Window:CreateTab("⚙️ Options", 4483362458)
 
--- State Variables
+-- State
 local recording = false
 local replaying = false
-local platformCounter = 0
-local platforms = {}
-local yellowPlatforms = {}
-local platformData = {}
-local yellowToRedMapping = {}
+local playSpeed = 1
+local platforms, yellowPlatforms = {}, {}
+local platformData, yellowToRedMapping = {}, {}
 local currentRecordingPlatform = nil
-local replayThread, shouldStopReplay = nil, false
-local forceConnection = nil
-local lastPos = nil
-local isClimbing = false
+local shouldStopReplay = false
+local BV -- BodyVelocity
+local startTime
+local jumpConn
+local devShield = false -- opsi: ForceField saat replay (untuk testing dev)
+local saveFile = "autowalk_v4.json"
 
--- === Helper: Force Movement Smooth ===
-local function stopForce()
-	if forceConnection then
-		forceConnection:Disconnect()
-		forceConnection = nil
+-- ---------- Helpers ----------
+local function notify(msg) Rayfield:Notify({Title="Auto Walk", Content=msg, Duration=3}) end
+
+local function ensureBV()
+	if not BV or not BV.Parent then
+		BV = Instance.new("BodyVelocity")
+		BV.MaxForce = Vector3.new(1e5, 0, 1e5)
+		BV.P = 1e4
+		BV.Velocity = Vector3.zero
+		BV.Parent = hrp
 	end
-	if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
+end
+local function cleanupBV()
+	if BV then pcall(function() BV.Velocity = Vector3.zero end); BV:Destroy(); BV=nil end
+	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
 end
 
-local function startForce()
-	if forceConnection then return end
-	forceConnection = RunService.Heartbeat:Connect(function()
-		if not hrp or not humanoid then return end
-		if isClimbing then return end
-		local moveDir = humanoid.MoveDirection
-		local speed = humanoid.WalkSpeed
-		hrp.AssemblyLinearVelocity = Vector3.new(moveDir.X * speed, hrp.AssemblyLinearVelocity.Y, moveDir.Z * speed)
-	end)
+-- Snap platform ke tanah tepat di bawah posisi
+local function groundSnap(pos)
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {character}
+	params.FilterType = Enum.RaycastFilterType.Blacklist
+	local result = workspace:Raycast(pos + Vector3.new(0,5,0), Vector3.new(0,-500,0), params)
+	if result then
+		return Vector3.new(pos.X, result.Position.Y + 0.5, pos.Z)
+	else
+		-- fallback kalau tak ada tanah: 3 stud di bawah
+		return pos - Vector3.new(0,3,0)
+	end
 end
 
-humanoid.StateChanged:Connect(function(_, new)
-	isClimbing = (new == Enum.HumanoidStateType.Climbing)
-end)
-
--- === Helper: Pathfinding ===
+-- Pathfinding walk
 local function walkTo(pos)
 	local path = PathfindingService:CreatePath()
 	path:ComputeAsync(hrp.Position, pos)
 	if path.Status == Enum.PathStatus.Success then
 		for _, wp in ipairs(path:GetWaypoints()) do
-			if shouldStopReplay then break end
+			if shouldStopReplay then return end
 			humanoid:MoveTo(wp.Position)
 			if wp.Action == Enum.PathWaypointAction.Jump then humanoid.Jump = true end
 			humanoid.MoveToFinished:Wait()
@@ -84,176 +90,249 @@ local function walkTo(pos)
 	end
 end
 
--- === UI Feedback ===
-local statusLabel = {Text = "Status: Idle"}
-local function setStatus(text, color)
-	Rayfield:Notify({Title = "Auto Walk", Content = text, Duration = 3})
-	statusLabel.Text = text
-	print("[Status]", text)
-end
-
--- === Recording ===
+-- ---------- RECORD ----------
 local function startRecord()
 	if recording then return end
 	recording = true
-	setStatus("Recording started", Color3.fromRGB(0, 200, 255))
+	shouldStopReplay = false
+	platformData = platformData or {}
 
-	platformCounter += 1
+	-- Buat platform merah di tanah tepat di bawah karakter
 	local red = Instance.new("Part")
+	red.Name = "Platform "..tostring(#platforms+1)
 	red.Size = Vector3.new(5,1,5)
 	red.Anchored = true
 	red.CanCollide = false
 	red.Color = Color3.fromRGB(255,0,0)
-	red.Position = hrp.Position - Vector3.new(0,3,0)
+	red.Position = groundSnap(hrp.Position)
 	red.Parent = workspace
+
 	table.insert(platforms, red)
 	platformData[red] = {}
-	currentRecordingPlatform = red
 
-	spawn(function()
-		while recording do
-			task.wait(0.05)
+	-- Mulai timestamp
+	startTime = tick()
+
+	-- Simpan frame pertama segera (t=0)
+	table.insert(platformData[red], {
+		t = 0,
+		pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+		isJump = false
+	})
+
+	-- Deteksi jump instan selama record
+	if jumpConn then jumpConn:Disconnect() end
+	jumpConn = UserInputService.JumpRequest:Connect(function()
+		if recording then
 			table.insert(platformData[red], {
-				position = hrp.Position,
-				orientation = hrp.Orientation,
-				isJumping = humanoid.Jump
+				t = tick() - startTime,
+				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+				isJump = true
 			})
 		end
 	end)
+
+	-- Loop rekam (Heartbeat): simpan posisi + waktu
+	task.spawn(function()
+		while recording do
+			table.insert(platformData[red], {
+				t = tick() - startTime,
+				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+				isJump = false
+			})
+			RunService.Heartbeat:Wait()
+		end
+	end)
+
+	notify("Recording started")
 end
 
 local function stopRecord()
 	if not recording then return end
 	recording = false
-	setStatus("Recording stopped", Color3.fromRGB(255,165,0))
+	if jumpConn then jumpConn:Disconnect(); jumpConn=nil end
 
+	-- Buat platform kuning pada posisi berhenti (snap ke tanah)
 	local yellow = Instance.new("Part")
 	yellow.Size = Vector3.new(5,1,5)
 	yellow.Anchored = true
 	yellow.CanCollide = false
 	yellow.Color = Color3.fromRGB(255,255,0)
-	yellow.Position = hrp.Position - Vector3.new(0,3,0)
+	yellow.Position = groundSnap(hrp.Position)
 	yellow.Parent = workspace
+
 	table.insert(yellowPlatforms, yellow)
-	yellowToRedMapping[yellow] = currentRecordingPlatform
-	currentRecordingPlatform = nil
+	yellowToRedMapping[yellow] = platforms[#platforms]
+
+	notify("Recording stopped")
 end
 
--- === Replay ===
+-- ---------- PLAY ----------
 local function playRecord()
 	if replaying or #platforms == 0 then return end
 	replaying = true
 	shouldStopReplay = false
-	setStatus("Starting replay", Color3.fromRGB(0,255,255))
+
+	-- (Opsional) Dev Shield saat replay (testing map sendiri)
+	local ff
+	if devShield then
+		ff = Instance.new("ForceField")
+		ff.Visible = false
+		ff.Parent = character
+	end
+
 	task.spawn(function()
-		for i, platform in ipairs(platforms) do
+		for idx, red in ipairs(platforms) do
 			if shouldStopReplay then break end
-			local moves = platformData[platform]
-			if moves then
-				for j = 1, #moves-1 do
+
+			-- 1) Pastikan kita mulai dari platform yang benar (jalan dulu ke atasnya)
+			walkTo(red.Position + Vector3.new(0,3,0))
+			if shouldStopReplay then break end
+
+			-- 2) Playback antar sampel halus pakai BodyVelocity berdasar timing
+			local frames = platformData[red]
+			if frames and #frames > 1 then
+				ensureBV()
+				for i = 1, #frames-1 do
 					if shouldStopReplay then break end
-					local a, b = moves[j], moves[j+1]
-					local duration = (b.position - a.position).Magnitude / 16
-					local startTime = tick()
-					while tick() - startTime < duration do
+					local a, b = frames[i], frames[i+1]
+					local pA = Vector3.new(a.pos[1],a.pos[2],a.pos[3])
+					local pB = Vector3.new(b.pos[1],b.pos[2],b.pos[3])
+					local dt = math.max((b.t - a.t)/playSpeed, 1/120) -- minimal frame durasi
+					local delta = pB - pA
+					local flat = Vector3.new(delta.X, 0, delta.Z)
+					local dist = flat.Magnitude
+
+					-- kecepatan sesuai rekaman (jarak / waktu)
+					local speed = (dist > 0 and dt > 0) and (dist/dt) or 0
+
+					-- orientasi look-at arah gerak
+					if flat.Magnitude > 1e-3 then
+						hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + flat)
+					end
+
+					-- jalankan selama dt
+					local t0 = tick()
+					while tick()-t0 < dt do
 						if shouldStopReplay then break end
-						local alpha = (tick()-startTime)/duration
-						local pos = a.position:Lerp(b.position, alpha)
-						character:SetPrimaryPartCFrame(CFrame.new(pos) * CFrame.Angles(
-							math.rad(a.orientation.X),
-							math.rad(a.orientation.Y),
-							math.rad(a.orientation.Z)
-						))
-						if b.isJumping then humanoid.Jump = true end
+						-- set velocity horizontal; biarkan gravitasi urus Y
+						if flat.Magnitude > 1e-3 then
+							local v = flat.Unit * speed
+							BV.Velocity = Vector3.new(v.X, 0, v.Z)
+						else
+							BV.Velocity = Vector3.zero
+						end
+
+						-- eksekusi jump bila di frame target
+						if b.isJump then humanoid.Jump = true end
+
 						RunService.Heartbeat:Wait()
 					end
 				end
+				BV.Velocity = Vector3.zero
 			end
-			task.wait(0.3)
+
+			task.wait(0.15) -- jeda antar platform
 		end
+
+		cleanupBV()
+		if ff then ff:Destroy() end
 		replaying = false
-		stopForce()
-		setStatus("Replay done", Color3.fromRGB(0,255,0))
+		notify("Replay finished")
 	end)
 end
 
 local function stopReplay()
-	if replaying then
-		shouldStopReplay = true
-		replaying = false
-		stopForce()
-		setStatus("Replay stopped", Color3.fromRGB(255,0,0))
-	end
+	if not replaying then return end
+	shouldStopReplay = true
+	replaying = false
+	cleanupBV()
+	notify("Replay stopped")
 end
 
--- === Save/Load ===
+-- ---------- SAVE / LOAD ----------
 local function savePath()
-	local data = {}
-	for _, p in ipairs(platforms) do
-		local movements = {}
-		for _, m in ipairs(platformData[p]) do
-			table.insert(movements, {
-				position = {m.position.X, m.position.Y, m.position.Z},
-				orientation = {m.orientation.X, m.orientation.Y, m.orientation.Z},
-				isJumping = m.isJumping
-			})
+	local export = {}
+	for _, red in ipairs(platforms) do
+		local frames = platformData[red]
+		local outFrames = {}
+		for _, f in ipairs(frames or {}) do
+			table.insert(outFrames, { t=f.t, pos=f.pos, isJump=f.isJump })
 		end
-		table.insert(data, {pos = {p.Position.X, p.Position.Y, p.Position.Z}, movements = movements})
+		table.insert(export, { pos = {red.Position.X,red.Position.Y,red.Position.Z}, frames = outFrames })
 	end
-	setclipboard(HttpService:JSONEncode(data))
-	setStatus("Copied path data to clipboard", Color3.fromRGB(0,255,0))
+	writefile(saveFile, HttpService:JSONEncode(export))
+	notify(("Saved to %s"):format(saveFile))
 end
 
-local function loadPath(text)
-	local success, data = pcall(function() return HttpService:JSONDecode(text) end)
-	if not success then setStatus("Invalid JSON", Color3.fromRGB(255,0,0)) return end
+local function loadPath()
+	if not isfile(saveFile) then notify("Save file not found"); return end
+	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(saveFile)) end)
+	if not ok or type(data)~="table" then notify("Invalid JSON"); return end
 
-	for _, old in ipairs(platforms) do old:Destroy() end
-	platforms, platformData = {}, {}
+	-- Bersihkan lama
+	for _, p in ipairs(platforms) do p:Destroy() end
+	for _, y in ipairs(yellowPlatforms) do y:Destroy() end
+	platforms, yellowPlatforms, platformData, yellowToRedMapping = {}, {}, {}, {}
 
-	for _, p in ipairs(data) do
+	-- Muat ulang
+	for _, rec in ipairs(data) do
 		local red = Instance.new("Part")
 		red.Size = Vector3.new(5,1,5)
 		red.Anchored = true
 		red.CanCollide = false
 		red.Color = Color3.fromRGB(255,0,0)
-		red.Position = Vector3.new(p.pos[1], p.pos[2], p.pos[3])
+		red.Position = Vector3.new(rec.pos[1], rec.pos[2], rec.pos[3])
 		red.Parent = workspace
 		table.insert(platforms, red)
 
-		local movements = {}
-		for _, m in ipairs(p.movements) do
-			table.insert(movements, {
-				position = Vector3.new(m.position[1], m.position[2], m.position[3]),
-				orientation = Vector3.new(m.orientation[1], m.orientation[2], m.orientation[3]),
-				isJumping = m.isJumping
-			})
+		local frames = {}
+		for _, f in ipairs(rec.frames or {}) do
+			table.insert(frames, { t=f.t, pos=f.pos, isJump=f.isJump })
 		end
-		platformData[red] = movements
+		platformData[red] = frames
 	end
-	setStatus("Loaded path data", Color3.fromRGB(0,255,0))
+	notify("Loaded path data")
 end
 
--- === UI Elements ===
-tabRecord:CreateButton({Name="🎬 Start Record", Callback=startRecord})
-tabRecord:CreateButton({Name="⏹ Stop Record", Callback=stopRecord})
-tabRecord:CreateButton({Name="▶️ Play Replay", Callback=playRecord})
+-- ---------- UI ----------
+tabRecord:CreateButton({Name="▶ Start Record", Callback=startRecord})
+tabRecord:CreateButton({Name="⏹ Stop Record",  Callback=stopRecord})
+tabRecord:CreateButton({Name="🎬 Play Replay", Callback=playRecord})
 tabRecord:CreateButton({Name="🛑 Stop Replay", Callback=stopReplay})
-tabSave:CreateButton({Name="💾 Save Path (Copy JSON)", Callback=savePath})
 
-tabSave:CreateInput({
-	Name = "📥 Load JSON Data",
-	PlaceholderText = "Paste JSON here",
-	RemoveTextAfterFocusLost = false,
-	Callback = function(txt) loadPath(txt) end
+tabRecord:CreateSlider({
+	Name="Replay Speed",
+	Range={0.5,3},
+	Increment=0.1,
+	Suffix="x",
+	CurrentValue=1,
+	Callback=function(v) playSpeed=v end
 })
 
-tabSave:CreateButton({
-	Name = "🧹 Clear All Platforms",
-	Callback = function()
-		for _, p in ipairs(platforms) do p:Destroy() end
-		for _, p in ipairs(yellowPlatforms) do p:Destroy() end
-		platforms, yellowPlatforms, platformData, yellowToRedMapping = {}, {}, {}, {}
-		setStatus("All cleared", Color3.fromRGB(255,0,0))
-	end
+tabRecord:CreateSlider({
+	Name="WalkSpeed",
+	Range={10,200},
+	Increment=1,
+	Suffix=" ws",
+	CurrentValue=humanoid.WalkSpeed,
+	Callback=function(v) humanoid.WalkSpeed = v end
+})
+
+tabRecord:CreateSlider({
+	Name="JumpPower",
+	Range={10,300},
+	Increment=1,
+	Suffix=" jp",
+	CurrentValue=humanoid.JumpPower,
+	Callback=function(v) humanoid.JumpPower = v end
+})
+
+tabSave:CreateButton({Name="💾 Save Path (to file)", Callback=savePath})
+tabSave:CreateButton({Name="📂 Load Path (from file)", Callback=loadPath})
+
+tabOpts:CreateToggle({
+	Name="Dev Shield (ForceField saat replay)",
+	CurrentValue=false,
+	Callback=function(on) devShield = on end
 })
