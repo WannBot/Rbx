@@ -1,78 +1,123 @@
--- ⚙️ Service
+-- //==================================================\\
+-- ||            AUTO WALK RECORDER V4 (Rayfield)     ||
+-- ||         By ChatGPT Custom Build - Blue UI        ||
+-- \\==================================================//
+
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local PathfindingService = game:GetService("PathfindingService")
 local HttpService = game:GetService("HttpService")
+
 local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
 
--- === Rayfield UI ===
+-- Load Rayfield UI
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
 local Window = Rayfield:CreateWindow({
-	Name = "Auto Walk V4",
-	LoadingTitle = "Smooth Record",
-	LoadingSubtitle = "Record • Replay • Save • Load",
-	KeySystem = false,
+	Name = "Auto Walk Recorder V4",
+	LoadingTitle = "Initializing Auto Walk System",
+	LoadingSubtitle = "By ChatGPT Custom Build",
+	ConfigurationSaving = {Enabled = false},
+	KeySystem = false
 })
-local Tab = Window:CreateTab("Path Control", 4483362458)
 
--- === State ===
-local hrp, hum
+-- Tabs
+local tabRecord = Window:CreateTab("🎥 Record", 4483362458)
+local tabSave = Window:CreateTab("💾 Save / Load", 4483362458)
+
+-- State Variables
 local recording = false
-local playing = false
-local recordData = {}
-local BV
-local playConn
-local saveFile = "autowalk_v4.json"
-local playSpeed = 1
+local replaying = false
+local platformCounter = 0
+local platforms = {}
+local yellowPlatforms = {}
+local platformData = {}
+local yellowToRedMapping = {}
+local currentRecordingPlatform = nil
+local replayThread, shouldStopReplay = nil, false
+local forceConnection = nil
+local lastPos = nil
+local isClimbing = false
 
--- === Helper ===
-local function bindChar()
-	local char = player.Character or player.CharacterAdded:Wait()
-	hum = char:WaitForChild("Humanoid")
-	hrp = char:WaitForChild("HumanoidRootPart")
+-- === Helper: Force Movement Smooth ===
+local function stopForce()
+	if forceConnection then
+		forceConnection:Disconnect()
+		forceConnection = nil
+	end
+	if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
 end
-bindChar()
-player.CharacterAdded:Connect(bindChar)
 
-local function ensureBV()
-	if not BV or not BV.Parent then
-		BV = Instance.new("BodyVelocity")
-		BV.MaxForce = Vector3.new(1e5, 0, 1e5)
-		BV.P = 1e4
-		BV.Velocity = Vector3.zero
-		BV.Parent = hrp
+local function startForce()
+	if forceConnection then return end
+	forceConnection = RunService.Heartbeat:Connect(function()
+		if not hrp or not humanoid then return end
+		if isClimbing then return end
+		local moveDir = humanoid.MoveDirection
+		local speed = humanoid.WalkSpeed
+		hrp.AssemblyLinearVelocity = Vector3.new(moveDir.X * speed, hrp.AssemblyLinearVelocity.Y, moveDir.Z * speed)
+	end)
+end
+
+humanoid.StateChanged:Connect(function(_, new)
+	isClimbing = (new == Enum.HumanoidStateType.Climbing)
+end)
+
+-- === Helper: Pathfinding ===
+local function walkTo(pos)
+	local path = PathfindingService:CreatePath()
+	path:ComputeAsync(hrp.Position, pos)
+	if path.Status == Enum.PathStatus.Success then
+		for _, wp in ipairs(path:GetWaypoints()) do
+			if shouldStopReplay then break end
+			humanoid:MoveTo(wp.Position)
+			if wp.Action == Enum.PathWaypointAction.Jump then humanoid.Jump = true end
+			humanoid.MoveToFinished:Wait()
+		end
+	else
+		humanoid:MoveTo(pos)
+		humanoid.MoveToFinished:Wait()
 	end
 end
 
-local function cleanupBV()
-	if BV then
-		pcall(function() BV.Velocity = Vector3.zero end)
-		pcall(function() BV:Destroy() end)
-		BV = nil
-	end
+-- === UI Feedback ===
+local statusLabel = {Text = "Status: Idle"}
+local function setStatus(text, color)
+	Rayfield:Notify({Title = "Auto Walk", Content = text, Duration = 3})
+	statusLabel.Text = text
+	print("[Status]", text)
 end
 
-----------------------------------------------------------
--- === RECORD ===
-----------------------------------------------------------
+-- === Recording ===
 local function startRecord()
 	if recording then return end
 	recording = true
-	recordData = {}
-	print("[AutoWalkV4] ▶ Mulai merekam...")
+	setStatus("Recording started", Color3.fromRGB(0, 200, 255))
 
-	task.spawn(function()
-		local lastPos = hrp.Position
+	platformCounter += 1
+	local red = Instance.new("Part")
+	red.Size = Vector3.new(5,1,5)
+	red.Anchored = true
+	red.CanCollide = false
+	red.Color = Color3.fromRGB(255,0,0)
+	red.Position = hrp.Position - Vector3.new(0,3,0)
+	red.Parent = workspace
+	table.insert(platforms, red)
+	platformData[red] = {}
+	currentRecordingPlatform = red
+
+	spawn(function()
 		while recording do
-			local currentPos = hrp.Position
-			local delta = (currentPos - lastPos)
-			local timeNow = tick()
-			table.insert(recordData, {
-				pos = {currentPos.X, currentPos.Y, currentPos.Z},
-				time = timeNow,
-				jump = hum:GetState() == Enum.HumanoidStateType.Jumping
+			task.wait(0.05)
+			table.insert(platformData[red], {
+				position = hrp.Position,
+				orientation = hrp.Orientation,
+				isJumping = humanoid.Jump
 			})
-			lastPos = currentPos
-			task.wait(0.05) -- smooth sampling
 		end
 	end)
 end
@@ -80,150 +125,135 @@ end
 local function stopRecord()
 	if not recording then return end
 	recording = false
-	print("[AutoWalkV4] ⏹ Stop. Total frame:", #recordData)
+	setStatus("Recording stopped", Color3.fromRGB(255,165,0))
+
+	local yellow = Instance.new("Part")
+	yellow.Size = Vector3.new(5,1,5)
+	yellow.Anchored = true
+	yellow.CanCollide = false
+	yellow.Color = Color3.fromRGB(255,255,0)
+	yellow.Position = hrp.Position - Vector3.new(0,3,0)
+	yellow.Parent = workspace
+	table.insert(yellowPlatforms, yellow)
+	yellowToRedMapping[yellow] = currentRecordingPlatform
+	currentRecordingPlatform = nil
 end
 
-----------------------------------------------------------
--- === PLAYBACK ===
-----------------------------------------------------------
+-- === Replay ===
 local function playRecord()
-	if #recordData == 0 then
-		warn("[AutoWalkV4] Tidak ada data rekaman!")
-		return
-	end
-	if playing then return end
-	playing = true
-	print("[AutoWalkV4] ▶ Memutar ulang... (" .. #recordData .. " frame)")
-
-	ensureBV()
-	local i = 1
-	local lastPos = hrp.Position
-
-	playConn = RunService.Heartbeat:Connect(function()
-		if not playing then return end
-		if i >= #recordData then
-			cleanupBV()
-			playConn:Disconnect()
-			playing = false
-			print("[AutoWalkV4] ✅ Replay selesai.")
-			return
+	if replaying or #platforms == 0 then return end
+	replaying = true
+	shouldStopReplay = false
+	setStatus("Starting replay", Color3.fromRGB(0,255,255))
+	task.spawn(function()
+		for i, platform in ipairs(platforms) do
+			if shouldStopReplay then break end
+			local moves = platformData[platform]
+			if moves then
+				for j = 1, #moves-1 do
+					if shouldStopReplay then break end
+					local a, b = moves[j], moves[j+1]
+					local duration = (b.position - a.position).Magnitude / 16
+					local startTime = tick()
+					while tick() - startTime < duration do
+						if shouldStopReplay then break end
+						local alpha = (tick()-startTime)/duration
+						local pos = a.position:Lerp(b.position, alpha)
+						character:SetPrimaryPartCFrame(CFrame.new(pos) * CFrame.Angles(
+							math.rad(a.orientation.X),
+							math.rad(a.orientation.Y),
+							math.rad(a.orientation.Z)
+						))
+						if b.isJumping then humanoid.Jump = true end
+						RunService.Heartbeat:Wait()
+					end
+				end
+			end
+			task.wait(0.3)
 		end
-
-		local step = recordData[i]
-		local nextStep = recordData[i + 1]
-		if not step or not nextStep then return end
-
-		local target = Vector3.new(nextStep.pos[1], nextStep.pos[2], nextStep.pos[3])
-		local move = (target - hrp.Position)
-		local flatDir = Vector3.new(move.X, 0, move.Z)
-		local dist = flatDir.Magnitude
-		local baseSpeed = (hum.WalkSpeed or 16) * playSpeed
-
-		if dist > 0.5 then
-			local vel = flatDir.Unit * baseSpeed
-			BV.Velocity = Vector3.new(vel.X, 0, vel.Z)
-			hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + flatDir)
-		else
-			BV.Velocity = Vector3.zero
-		end
-
-		if step.jump then
-			hum.Jump = true
-		end
-
-		i += 1
+		replaying = false
+		stopForce()
+		setStatus("Replay done", Color3.fromRGB(0,255,0))
 	end)
 end
 
-local function stopPlay()
-	if not playing then return end
-	playing = false
-	if playConn then playConn:Disconnect() end
-	cleanupBV()
-	print("[AutoWalkV4] ⏹ Replay dihentikan.")
+local function stopReplay()
+	if replaying then
+		shouldStopReplay = true
+		replaying = false
+		stopForce()
+		setStatus("Replay stopped", Color3.fromRGB(255,0,0))
+	end
 end
 
-----------------------------------------------------------
--- === SAVE / LOAD JSON ===
-----------------------------------------------------------
-local function saveRecord()
-	if #recordData == 0 then
-		warn("[AutoWalkV4] Tidak ada data untuk disimpan!")
-		return
+-- === Save/Load ===
+local function savePath()
+	local data = {}
+	for _, p in ipairs(platforms) do
+		local movements = {}
+		for _, m in ipairs(platformData[p]) do
+			table.insert(movements, {
+				position = {m.position.X, m.position.Y, m.position.Z},
+				orientation = {m.orientation.X, m.orientation.Y, m.orientation.Z},
+				isJumping = m.isJumping
+			})
+		end
+		table.insert(data, {pos = {p.Position.X, p.Position.Y, p.Position.Z}, movements = movements})
 	end
-	writefile(saveFile, HttpService:JSONEncode(recordData))
-	print("[AutoWalkV4] 💾 Disimpan ke:", saveFile)
+	setclipboard(HttpService:JSONEncode(data))
+	setStatus("Copied path data to clipboard", Color3.fromRGB(0,255,0))
 end
 
-local function loadRecord()
-	if not isfile(saveFile) then
-		warn("[AutoWalkV4] File tidak ditemukan!")
-		return
+local function loadPath(text)
+	local success, data = pcall(function() return HttpService:JSONDecode(text) end)
+	if not success then setStatus("Invalid JSON", Color3.fromRGB(255,0,0)) return end
+
+	for _, old in ipairs(platforms) do old:Destroy() end
+	platforms, platformData = {}, {}
+
+	for _, p in ipairs(data) do
+		local red = Instance.new("Part")
+		red.Size = Vector3.new(5,1,5)
+		red.Anchored = true
+		red.CanCollide = false
+		red.Color = Color3.fromRGB(255,0,0)
+		red.Position = Vector3.new(p.pos[1], p.pos[2], p.pos[3])
+		red.Parent = workspace
+		table.insert(platforms, red)
+
+		local movements = {}
+		for _, m in ipairs(p.movements) do
+			table.insert(movements, {
+				position = Vector3.new(m.position[1], m.position[2], m.position[3]),
+				orientation = Vector3.new(m.orientation[1], m.orientation[2], m.orientation[3]),
+				isJumping = m.isJumping
+			})
+		end
+		platformData[red] = movements
 	end
-	local data = readfile(saveFile)
-	recordData = HttpService:JSONDecode(data)
-	print("[AutoWalkV4] 📂 Data dimuat:", #recordData, "frame.")
+	setStatus("Loaded path data", Color3.fromRGB(0,255,0))
 end
 
-----------------------------------------------------------
--- === UI (Rayfield) ===
-----------------------------------------------------------
-Tab:CreateButton({
-	Name = "▶ Start Record",
-	Callback = startRecord
-})
-Tab:CreateButton({
-	Name = "⏹ Stop Record",
-	Callback = stopRecord
-})
-Tab:CreateButton({
-	Name = "🎬 Play Path",
-	Callback = playRecord
-})
-Tab:CreateButton({
-	Name = "🛑 Stop Play",
-	Callback = stopPlay
-})
-Tab:CreateButton({
-	Name = "💾 Save Path",
-	Callback = saveRecord
-})
-Tab:CreateButton({
-	Name = "📂 Load Path",
-	Callback = loadRecord
+-- === UI Elements ===
+tabRecord:CreateButton({Name="🎬 Start Record", Callback=startRecord})
+tabRecord:CreateButton({Name="⏹ Stop Record", Callback=stopRecord})
+tabRecord:CreateButton({Name="▶️ Play Replay", Callback=playRecord})
+tabRecord:CreateButton({Name="🛑 Stop Replay", Callback=stopReplay})
+tabSave:CreateButton({Name="💾 Save Path (Copy JSON)", Callback=savePath})
+
+tabSave:CreateInput({
+	Name = "📥 Load JSON Data",
+	PlaceholderText = "Paste JSON here",
+	RemoveTextAfterFocusLost = false,
+	Callback = function(txt) loadPath(txt) end
 })
 
-Tab:CreateSlider({
-	Name = "Replay Speed",
-	Range = {0.5, 3},
-	Increment = 0.1,
-	Suffix = "x",
-	CurrentValue = 1,
-	Callback = function(v)
-		playSpeed = v
+tabSave:CreateButton({
+	Name = "🧹 Clear All Platforms",
+	Callback = function()
+		for _, p in ipairs(platforms) do p:Destroy() end
+		for _, p in ipairs(yellowPlatforms) do p:Destroy() end
+		platforms, yellowPlatforms, platformData, yellowToRedMapping = {}, {}, {}, {}
+		setStatus("All cleared", Color3.fromRGB(255,0,0))
 	end
 })
-
-Tab:CreateSlider({
-	Name = "WalkSpeed",
-	Range = {10, 200},
-	Increment = 1,
-	Suffix = " WS",
-	CurrentValue = 16,
-	Callback = function(v)
-		if hum then hum.WalkSpeed = v end
-	end
-})
-
-Tab:CreateSlider({
-	Name = "JumpPower",
-	Range = {10, 300},
-	Increment = 1,
-	Suffix = " JP",
-	CurrentValue = 50,
-	Callback = function(v)
-		if hum then hum.JumpPower = v end
-	end
-})
-
-print("[AutoWalkV4] ✅ Loaded successfully with smooth recording Rayfield UI.")
