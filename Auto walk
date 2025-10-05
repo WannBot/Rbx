@@ -1,116 +1,226 @@
--- GUI Rebuild: Clean & Modern UI
+-- ⚙️ Service
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local player = Players.LocalPlayer
 
--- Tunggu PlayerGui siap
-local PlayerGui = player:WaitForChild("PlayerGui", 5)
-if not PlayerGui then
-    warn("[RecorderUI] PlayerGui tidak ditemukan!")
-    return
+-- ⚙️ Rayfield UI
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Window = Rayfield:CreateWindow({
+	Name = "Auto Walk V4",
+	LoadingTitle = "Init Auto Walk",
+	LoadingSubtitle = "Record • Replay • Save • Load",
+	KeySystem = false
+})
+local Tab = Window:CreateTab("Path Control", 4483362458)
+
+-- ⚙️ State
+local hrp, hum
+local recording = false
+local playing = false
+local pathData = {}
+local recordConn, playConn
+local startTime
+local playSpeed = 1
+local saveFile = "autowalk_path.json"
+local BV -- BodyVelocity instance
+
+-- === Helper
+local function bindChar()
+	local char = player.Character or player.CharacterAdded:Wait()
+	hum = char:WaitForChild("Humanoid")
+	hrp = char:WaitForChild("HumanoidRootPart")
+end
+bindChar()
+player.CharacterAdded:Connect(bindChar)
+
+local function ensureBV()
+	if not BV or not BV.Parent then
+		BV = Instance.new("BodyVelocity")
+		BV.MaxForce = Vector3.new(1e5, 0, 1e5)
+		BV.P = 1e4
+		BV.Velocity = Vector3.zero
+		BV.Parent = hrp
+	end
 end
 
--- Pastikan tidak dobel
-if PlayerGui:FindFirstChild("RecorderUI") then
-    PlayerGui.RecorderUI:Destroy()
+local function cleanupBV()
+	if BV then
+		pcall(function() BV.Velocity = Vector3.zero end)
+		pcall(function() BV:Destroy() end)
+		BV = nil
+	end
 end
 
--- Create ScreenGui
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "RecorderUI"
-screenGui.ResetOnSpawn = false
-screenGui.IgnoreGuiInset = true
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.Parent = PlayerGui
+----------------------------------------------------------
+-- === Record Path ===
+----------------------------------------------------------
+local function startRecord()
+	if recording then return end
+	recording = true
+	pathData = {}
+	startTime = tick()
+	print("[AutoWalk] ▶ Start recording...")
 
--- Main frame
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 260, 0, 250)
-mainFrame.Position = UDim2.new(0.5, -130, 0.5, -125)
-mainFrame.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
-mainFrame.BorderSizePixel = 0
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = screenGui
+	recordConn = RunService.Heartbeat:Connect(function()
+		if recording and hrp then
+			table.insert(pathData, {
+				t = tick() - startTime,
+				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+				vel = hum.MoveDirection.Magnitude,
+				type = "move"
+			})
+		end
+	end)
 
-local corner = Instance.new("UICorner", mainFrame)
-corner.CornerRadius = UDim.new(0, 12)
-
--- Status label
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Parent = mainFrame
-statusLabel.Size = UDim2.new(1, -20, 0, 30)
-statusLabel.Position = UDim2.new(0, 10, 0, 10)
-statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Status: Idle"
-statusLabel.TextColor3 = Color3.fromRGB(40, 40, 40)
-statusLabel.Font = Enum.Font.GothamBold
-statusLabel.TextScaled = true
-
--- Button container
-local buttonContainer = Instance.new("Frame")
-buttonContainer.Parent = mainFrame
-buttonContainer.Size = UDim2.new(1, -20, 0, 170)
-buttonContainer.Position = UDim2.new(0, 10, 0, 50)
-buttonContainer.BackgroundTransparency = 1
-
-local grid = Instance.new("UIGridLayout", buttonContainer)
-grid.CellSize = UDim2.new(0, 120, 0, 40)
-grid.CellPadding = UDim2.new(0, 10, 0, 10)
-grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
-grid.VerticalAlignment = Enum.VerticalAlignment.Top
-
--- Button factory
-local function makeButton(name, color)
-	local btn = Instance.new("TextButton")
-	btn.Parent = buttonContainer
-	btn.Name = name
-	btn.Text = name
-	btn.Font = Enum.Font.GothamBold
-	btn.TextScaled = true
-	btn.BackgroundColor3 = color
-	btn.TextColor3 = Color3.new(1, 1, 1)
-	local c = Instance.new("UICorner", btn)
-	c.CornerRadius = UDim.new(0, 8)
-	return btn
+	hum.StateChanged:Connect(function(_, new)
+		if recording and new == Enum.HumanoidStateType.Jumping then
+			table.insert(pathData, {
+				t = tick() - startTime,
+				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+				vel = 0,
+				type = "jump"
+			})
+		end
+	end)
 end
 
--- Buttons
-local recordButton = makeButton("Record", Color3.fromRGB(220, 53, 69))
-local stopRecordButton = makeButton("Stop Record", Color3.fromRGB(255, 193, 7))
-local stopReplayButton = makeButton("Stop Replay", Color3.fromRGB(255, 87, 34))
-local destroyButton = makeButton("Destroy", Color3.fromRGB(108, 117, 125))
-local deleteButton = makeButton("Delete", Color3.fromRGB(220, 53, 69))
-local saveButton = makeButton("Save", Color3.fromRGB(40, 167, 69))
-local nextChunkButton = makeButton("Next Chunk", Color3.fromRGB(0, 123, 255))
+local function stopRecord()
+	if not recording then return end
+	recording = false
+	if recordConn then recordConn:Disconnect() recordConn = nil end
+	print("[AutoWalk] ⏹ Stop recording. Frames:", #pathData)
+end
 
--- Floating Minimize and Close Buttons
-local closeButton = Instance.new("ImageButton")
-closeButton.Parent = screenGui
-closeButton.Size = UDim2.new(0, 40, 0, 40)
-closeButton.Position = UDim2.new(1, -60, 0.25, 0)
-closeButton.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
-closeButton.Image = "rbxassetid://6031094678" -- X icon
-Instance.new("UICorner", closeButton).CornerRadius = UDim.new(1, 0)
+----------------------------------------------------------
+-- === Play Path ===
+----------------------------------------------------------
+local function playPath()
+	if #pathData == 0 then
+		warn("[AutoWalk] Tidak ada data record!")
+		return
+	end
+	if playing then return end
+	playing = true
+	print("[AutoWalk] ▶ Replaying... steps:", #pathData)
 
-local minimizeButton = Instance.new("ImageButton")
-minimizeButton.Parent = screenGui
-minimizeButton.Size = UDim2.new(0, 40, 0, 40)
-minimizeButton.Position = UDim2.new(1, -110, 0.25, 0)
-minimizeButton.BackgroundColor3 = Color3.fromRGB(255, 195, 0)
-minimizeButton.Image = "rbxassetid://6035067836" -- dash icon
-Instance.new("UICorner", minimizeButton).CornerRadius = UDim.new(1, 0)
+	ensureBV()
+	local playStart = tick()
+	local i = 1
 
--- Minimize logic
-local minimized = false
-minimizeButton.MouseButton1Click:Connect(function()
-	minimized = not minimized
-	mainFrame.Visible = not minimized
-end)
+	if playConn then playConn:Disconnect() end
+	playConn = RunService.Heartbeat:Connect(function(delta)
+		if not playing then return end
+		local elapsed = (tick() - playStart) * playSpeed
 
--- Close logic
-closeButton.MouseButton1Click:Connect(function()
-	screenGui:Destroy()
-end)
+		while i <= #pathData and elapsed >= pathData[i].t do
+			local step = pathData[i]
+			if step.type == "jump" then
+				hum.Jump = true
+			end
+			i += 1
+		end
 
-print("[RecorderUI] ✅ GUI berhasil dimuat.")
+		if i > #pathData then
+			cleanupBV()
+			playing = false
+			playConn:Disconnect()
+			print("[AutoWalk] ✅ Replay selesai.")
+			return
+		end
+
+		local stepNow = pathData[i]
+		if stepNow and stepNow.type == "move" then
+			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
+			local dir = (target - hrp.Position)
+			local horizontal = Vector3.new(dir.X, 0, dir.Z)
+			local dist = horizontal.Magnitude
+			local baseSpeed = (hum.WalkSpeed or 16) * playSpeed
+
+			if dist > 1 then
+				local moveDir = horizontal.Unit * baseSpeed
+				BV.Velocity = Vector3.new(moveDir.X, 0, moveDir.Z)
+				-- Rotasi ke arah
+				local lookAt = hrp.Position + horizontal
+				hrp.CFrame = CFrame.lookAt(hrp.Position, lookAt)
+			else
+				BV.Velocity = Vector3.zero
+			end
+		end
+	end)
+end
+
+local function stopPlay()
+	if not playing then return end
+	playing = false
+	if playConn then playConn:Disconnect() playConn = nil end
+	cleanupBV()
+	print("[AutoWalk] ⏹ Stop play.")
+end
+
+----------------------------------------------------------
+-- === Save / Load Path JSON ===
+----------------------------------------------------------
+local function savePath()
+	if #pathData == 0 then
+		warn("[AutoWalk] Tidak ada data disimpan!")
+		return
+	end
+	writefile(saveFile, HttpService:JSONEncode(pathData))
+	print("[AutoWalk] 💾 Disimpan ke file:", saveFile)
+end
+
+local function loadPath()
+	if not isfile(saveFile) then
+		warn("[AutoWalk] File", saveFile, "tidak ditemukan!")
+		return
+	end
+	pathData = HttpService:JSONDecode(readfile(saveFile))
+	print("[AutoWalk] 📂 Path dimuat:", #pathData, "steps.")
+end
+
+----------------------------------------------------------
+-- === UI Buttons ===
+----------------------------------------------------------
+Tab:CreateButton({ Name = "▶ Start Record", Callback = startRecord })
+Tab:CreateButton({ Name = "⏹ Stop Record", Callback = stopRecord })
+Tab:CreateButton({ Name = "🎬 Play Path", Callback = playPath })
+Tab:CreateButton({ Name = "🛑 Stop Play", Callback = stopPlay })
+Tab:CreateButton({ Name = "💾 Save Path", Callback = savePath })
+Tab:CreateButton({ Name = "📂 Load Path", Callback = loadPath })
+
+Tab:CreateSlider({
+	Name = "Replay Speed",
+	Range = {0.5, 3},
+	Increment = 0.1,
+	Suffix = "x",
+	CurrentValue = 1,
+	Callback = function(v)
+		playSpeed = v
+		print("[AutoWalk] Replay Speed:", v)
+	end
+})
+
+Tab:CreateSlider({
+	Name = "WalkSpeed",
+	Range = {10, 200},
+	Increment = 1,
+	Suffix = " WS",
+	CurrentValue = 16,
+	Callback = function(v)
+		if hum then hum.WalkSpeed = v end
+	end
+})
+
+Tab:CreateSlider({
+	Name = "JumpPower",
+	Range = {10, 300},
+	Increment = 1,
+	Suffix = " JP",
+	CurrentValue = 50,
+	Callback = function(v)
+		if hum then hum.JumpPower = v end
+	end
+})
+
+print("[AutoWalk] ✅ Loaded successfully with Rayfield UI.")
