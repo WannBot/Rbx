@@ -891,16 +891,16 @@ local currentChunkIndex = 0
 local totalChunks = 0
 local CHUNK_SIZE = 20 -- This is the number of platforms per chunk, adjust based on your clipboard size limits
 
--- === Tombol Save ke File JSON ===
-local saveToFileButton = Instance.new("TextButton")
-saveToFileButton.Parent = frame
-saveToFileButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-saveToFileButton.Size = UDim2.new(0, 200, 0, 30)
-saveToFileButton.Position = UDim2.new(0, 10, 0, 170)
-saveToFileButton.Text = "💾 Save Path to File"
-saveToFileButton.TextScaled = true
+-- === Tombol Save ke File JSON (Sederhana & Langsung ke Folder) ===
+local saveButton = Instance.new("TextButton")
+saveButton.Parent = frame
+saveButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+saveButton.Size = UDim2.new(0, 90, 0, 30)
+saveButton.Position = UDim2.new(0, 10, 0, 90)
+saveButton.Text = "💾 Save Path"
+saveButton.TextScaled = true
 
-saveToFileButton.MouseButton1Click:Connect(function()
+saveButton.MouseButton1Click:Connect(function()
     local folderPath = "AutoWalk"
     if not isfolder(folderPath) then
         makefolder(folderPath)
@@ -908,6 +908,7 @@ saveToFileButton.MouseButton1Click:Connect(function()
 
     local jsonData = serializePlatformData()
     local fileName = folderPath.."/AutoWalk_Session_"..tostring(os.time())..".json"
+
     local success, err = pcall(function()
         writefile(fileName, jsonData)
     end)
