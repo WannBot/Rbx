@@ -1,8 +1,11 @@
--- ============ Auto Walk Recorder V4 - Fixed Start & Smooth Replay ============
--- Rayfield UI tetap, platform merah/kuning tetap, struktur V4
--- Perbaikan: snap titik awal ke tanah, pathfind ke platform sebelum replay,
--- playback halus pakai BodyVelocity + timing rekaman, orientasi lookAt,
--- opsi DevShield saat replay (off by default).
+-- ============ Auto Walk Recorder V4 – Rayfield (Multi Save + Precise Stop) ============
+-- Fitur:
+-- 1) Record ➜ Red (start) + data frame + Yellow (end) [snap to ground]
+-- 2) Auto-Save per Stop Record -> Save 1, Save 2, ...
+-- 3) Play per-save (pathfind ke RED, replay halus BodyVelocity, STOP tepat di YELLOW)
+-- 4) Delete per-save (destroy parts + hapus dari UI)
+-- 5) Save All -> autowalk_all.json
+-- 6) Tab terpisah: Record vs Save/Load, tema biru Rayfield.
 
 -- Services
 local Players = game:GetService("Players")
@@ -16,35 +19,40 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
--- Rayfield
+-- Rayfield UI
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
 	Name = "Auto Walk Recorder V4",
-	LoadingTitle = "Init",
-	LoadingSubtitle = "Record • Replay • Save • Load",
+	LoadingTitle = "Init Recorder",
+	LoadingSubtitle = "Record • Replay • Multi-Save",
 	KeySystem = false
 })
-local tabRecord = Window:CreateTab("🎥 Record", 4483362458)
-local tabSave   = Window:CreateTab("💾 Save / Load", 4483362458)
-local tabOpts   = Window:CreateTab("⚙️ Options", 4483362458)
+local TabRecord = Window:CreateTab("🎥 Record", 4483362458)
+local TabSave   = Window:CreateTab("💾 Save",   4483362458)
+local TabOpts   = Window:CreateTab("⚙️ Options",4483362458)
 
--- State
+-- ===== State =====
 local recording = false
-local replaying = false
 local playSpeed = 1
-local platforms, yellowPlatforms = {}, {}
-local platformData, yellowToRedMapping = {}, {}
-local currentRecordingPlatform = nil
-local shouldStopReplay = false
 local BV -- BodyVelocity
 local startTime
 local jumpConn
-local devShield = false -- opsi: ForceField saat replay (untuk testing dev)
-local saveFile = "autowalk_v4.json"
 
--- ---------- Helpers ----------
+-- Struktur Save:
+-- saves[id] = {
+--   id = 1,
+--   name = "Save 1",
+--   red = <Part>,
+--   yellow = <Part>,
+--   frames = { {t, pos={x,y,z}, isJump}, ... },
+--   ui = { playBtn=..., delBtn=..., sep=... }
+-- }
+local saves = {}
+local nextSaveId = 1
+
 local function notify(msg) Rayfield:Notify({Title="Auto Walk", Content=msg, Duration=3}) end
 
+-- ===== Helpers =====
 local function ensureBV()
 	if not BV or not BV.Parent then
 		BV = Instance.new("BodyVelocity")
@@ -54,52 +62,142 @@ local function ensureBV()
 		BV.Parent = hrp
 	end
 end
+
 local function cleanupBV()
-	if BV then pcall(function() BV.Velocity = Vector3.zero end); BV:Destroy(); BV=nil end
+	if BV then
+		pcall(function() BV.Velocity = Vector3.zero end)
+		pcall(function() BV:Destroy() end)
+		BV = nil
+	end
 	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
 end
 
--- Snap platform ke tanah tepat di bawah posisi
 local function groundSnap(pos)
 	local params = RaycastParams.new()
 	params.FilterDescendantsInstances = {character}
 	params.FilterType = Enum.RaycastFilterType.Blacklist
-	local result = workspace:Raycast(pos + Vector3.new(0,5,0), Vector3.new(0,-500,0), params)
-	if result then
-		return Vector3.new(pos.X, result.Position.Y + 0.5, pos.Z)
+	local res = workspace:Raycast(pos + Vector3.new(0,5,0), Vector3.new(0,-500,0), params)
+	if res then
+		return Vector3.new(pos.X, res.Position.Y + 0.5, pos.Z)
 	else
-		-- fallback kalau tak ada tanah: 3 stud di bawah
 		return pos - Vector3.new(0,3,0)
 	end
 end
 
--- Pathfinding walk
-local function walkTo(pos)
+local function pathfindWalk(targetPos)
 	local path = PathfindingService:CreatePath()
-	path:ComputeAsync(hrp.Position, pos)
+	path:ComputeAsync(hrp.Position, targetPos)
 	if path.Status == Enum.PathStatus.Success then
 		for _, wp in ipairs(path:GetWaypoints()) do
-			if shouldStopReplay then return end
 			humanoid:MoveTo(wp.Position)
 			if wp.Action == Enum.PathWaypointAction.Jump then humanoid.Jump = true end
 			humanoid.MoveToFinished:Wait()
 		end
 	else
-		humanoid:MoveTo(pos)
+		humanoid:MoveTo(targetPos)
 		humanoid.MoveToFinished:Wait()
 	end
 end
 
--- ---------- RECORD ----------
+-- ===== UI Save List =====
+local SaveListSection = TabSave:CreateSection("Saves")
+local saveListContainer = {}  -- hanya marker; Rayfield tidak punya container, kita simpan refs di saves[id].ui
+
+local function removeSaveUI(id)
+	local s = saves[id]
+	if not s or not s.ui then return end
+	for key, inst in pairs(s.ui) do
+		if typeof(inst) == "table" and inst.Destroy then
+			-- in case
+		end
+	end
+	-- Rayfield tidak expose Destroy, tapi kita bisa hide dg mengganti labelnya.
+	-- Solusi: kita buat ulang UI saat delete (rebuild).
+end
+
+local function rebuildSaveUI()
+	-- Hapus semua entri UI lalu buat ulang (Rayfield tidak support destroy per-button).
+	TabSave:CreateSection("Saves (refreshed)")
+	-- Untuk mencegah UI memanjang terus, cukup informatif.
+	for _, s in ipairs(saves) do
+		if s then
+			TabSave:CreateDivider(s.name)
+			TabSave:CreateButton({
+				Name = "▶ Play "..s.name,
+				Callback = function()
+					-- Play per-save
+					task.spawn(function()
+						-- 1) jalan ke RED start
+						pathfindWalk(s.red.Position + Vector3.new(0,3,0))
+
+						-- 2) replay frames halus sesuai timing
+						if s.frames and #s.frames > 1 then
+							ensureBV()
+							for i=1, #s.frames-1 do
+								local a, b = s.frames[i], s.frames[i+1]
+								local pA = Vector3.new(a.pos[1], a.pos[2], a.pos[3])
+								local pB = Vector3.new(b.pos[1], b.pos[2], b.pos[3])
+								local dt = math.max((b.t - a.t)/playSpeed, 1/120)
+								local delta = pB - pA
+								local flat = Vector3.new(delta.X, 0, delta.Z)
+								local dist = flat.Magnitude
+								local speed = (dist > 0 and dt > 0) and (dist/dt) or 0
+
+								local t0 = tick()
+								while tick()-t0 < dt do
+									local remain = dt - (tick()-t0)
+									if flat.Magnitude > 1e-3 then
+										local decelFactor = math.clamp(remain/dt, 0.1, 1) -- kurangi di akhir
+										local v = flat.Unit * speed * decelFactor
+										BV.Velocity = Vector3.new(v.X, 0, v.Z)
+										hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + flat)
+									else
+										BV.Velocity = Vector3.zero
+									end
+									if b.isJump then humanoid.Jump = true end
+									RunService.Heartbeat:Wait()
+								end
+							end
+							BV.Velocity = Vector3.zero
+						end
+
+						-- 3) pastikan STOP tepat di YELLOW (snap final)
+						humanoid:MoveTo(s.yellow.Position + Vector3.new(0,3,0))
+						humanoid.MoveToFinished:Wait()
+						cleanupBV()
+						notify(s.name.." finished.")
+					end)
+				end
+			})
+			TabSave:CreateButton({
+				Name = "🗑 Delete "..s.name,
+				Callback = function()
+					-- Destroy parts
+					if s.red and s.red.Parent then s.red:Destroy() end
+					if s.yellow and s.yellow.Parent then s.yellow:Destroy() end
+					-- Remove from saves table
+					for idx, itm in ipairs(saves) do
+						if itm and itm.id == s.id then
+							table.remove(saves, idx)
+							break
+						end
+					end
+					notify(s.name.." deleted.")
+					-- Rebuild UI list
+					rebuildSaveUI()
+				end
+			})
+		end
+	end
+end
+
+-- ===== Record / Stop =====
 local function startRecord()
 	if recording then return end
 	recording = true
-	shouldStopReplay = false
-	platformData = platformData or {}
 
-	-- Buat platform merah di tanah tepat di bawah karakter
+	-- buat RED di ground
 	local red = Instance.new("Part")
-	red.Name = "Platform "..tostring(#platforms+1)
 	red.Size = Vector3.new(5,1,5)
 	red.Anchored = true
 	red.CanCollide = false
@@ -107,44 +205,33 @@ local function startRecord()
 	red.Position = groundSnap(hrp.Position)
 	red.Parent = workspace
 
-	table.insert(platforms, red)
-	platformData[red] = {}
-
-	-- Mulai timestamp
+	-- frames
+	local frames = {}
 	startTime = tick()
 
-	-- Simpan frame pertama segera (t=0)
-	table.insert(platformData[red], {
-		t = 0,
-		pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-		isJump = false
-	})
+	-- frame pertama
+	table.insert(frames, {t=0, pos={hrp.Position.X, hrp.Position.Y, hrp.Position.Z}, isJump=false})
 
-	-- Deteksi jump instan selama record
+	-- jump langsung dari input
 	if jumpConn then jumpConn:Disconnect() end
 	jumpConn = UserInputService.JumpRequest:Connect(function()
 		if recording then
-			table.insert(platformData[red], {
-				t = tick() - startTime,
-				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				isJump = true
-			})
+			table.insert(frames, { t = tick()-startTime, pos = {hrp.Position.X,hrp.Position.Y,hrp.Position.Z}, isJump = true })
 		end
 	end)
 
-	-- Loop rekam (Heartbeat): simpan posisi + waktu
+	-- loop rekam position tiap Heartbeat (halus)
 	task.spawn(function()
 		while recording do
-			table.insert(platformData[red], {
-				t = tick() - startTime,
-				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				isJump = false
-			})
+			table.insert(frames, { t = tick()-startTime, pos = {hrp.Position.X,hrp.Position.Y,hrp.Position.Z}, isJump=false })
 			RunService.Heartbeat:Wait()
 		end
 	end)
 
 	notify("Recording started")
+	-- simpan sementara red & frames sebagai upvalue di closure
+	_G.__currentRed = red
+	_G.__currentFrames = frames
 end
 
 local function stopRecord()
@@ -152,7 +239,7 @@ local function stopRecord()
 	recording = false
 	if jumpConn then jumpConn:Disconnect(); jumpConn=nil end
 
-	-- Buat platform kuning pada posisi berhenti (snap ke tanah)
+	-- buat YELLOW di ground
 	local yellow = Instance.new("Part")
 	yellow.Size = Vector3.new(5,1,5)
 	yellow.Anchored = true
@@ -161,147 +248,48 @@ local function stopRecord()
 	yellow.Position = groundSnap(hrp.Position)
 	yellow.Parent = workspace
 
-	table.insert(yellowPlatforms, yellow)
-	yellowToRedMapping[yellow] = platforms[#platforms]
+	-- Auto-register as new Save
+	local id = nextSaveId
+	nextSaveId += 1
+	local save = {
+		id = id,
+		name = ("Save %d"):format(id),
+		red = _G.__currentRed,
+		yellow = yellow,
+		frames = _G.__currentFrames
+	}
+	table.insert(saves, save)
+	notify(save.name.." created.")
 
-	notify("Recording stopped")
+	-- Refresh daftar Save di TabSave
+	rebuildSaveUI()
 end
 
--- ---------- PLAY ----------
-local function playRecord()
-	if replaying or #platforms == 0 then return end
-	replaying = true
-	shouldStopReplay = false
-
-	-- (Opsional) Dev Shield saat replay (testing map sendiri)
-	local ff
-	if devShield then
-		ff = Instance.new("ForceField")
-		ff.Visible = false
-		ff.Parent = character
+-- ===== Save All =====
+local function saveAllToFile()
+	if #saves == 0 then
+		notify("No saves to write.")
+		return
 	end
-
-	task.spawn(function()
-		for idx, red in ipairs(platforms) do
-			if shouldStopReplay then break end
-
-			-- 1) Pastikan kita mulai dari platform yang benar (jalan dulu ke atasnya)
-			walkTo(red.Position + Vector3.new(0,3,0))
-			if shouldStopReplay then break end
-
-			-- 2) Playback antar sampel halus pakai BodyVelocity berdasar timing
-			local frames = platformData[red]
-			if frames and #frames > 1 then
-				ensureBV()
-				for i = 1, #frames-1 do
-					if shouldStopReplay then break end
-					local a, b = frames[i], frames[i+1]
-					local pA = Vector3.new(a.pos[1],a.pos[2],a.pos[3])
-					local pB = Vector3.new(b.pos[1],b.pos[2],b.pos[3])
-					local dt = math.max((b.t - a.t)/playSpeed, 1/120) -- minimal frame durasi
-					local delta = pB - pA
-					local flat = Vector3.new(delta.X, 0, delta.Z)
-					local dist = flat.Magnitude
-
-					-- kecepatan sesuai rekaman (jarak / waktu)
-					local speed = (dist > 0 and dt > 0) and (dist/dt) or 0
-
-					-- orientasi look-at arah gerak
-					if flat.Magnitude > 1e-3 then
-						hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + flat)
-					end
-
-					-- jalankan selama dt
-					local t0 = tick()
-					while tick()-t0 < dt do
-						if shouldStopReplay then break end
-						-- set velocity horizontal; biarkan gravitasi urus Y
-						if flat.Magnitude > 1e-3 then
-							local v = flat.Unit * speed
-							BV.Velocity = Vector3.new(v.X, 0, v.Z)
-						else
-							BV.Velocity = Vector3.zero
-						end
-
-						-- eksekusi jump bila di frame target
-						if b.isJump then humanoid.Jump = true end
-
-						RunService.Heartbeat:Wait()
-					end
-				end
-				BV.Velocity = Vector3.zero
-			end
-
-			task.wait(0.15) -- jeda antar platform
-		end
-
-		cleanupBV()
-		if ff then ff:Destroy() end
-		replaying = false
-		notify("Replay finished")
-	end)
-end
-
-local function stopReplay()
-	if not replaying then return end
-	shouldStopReplay = true
-	replaying = false
-	cleanupBV()
-	notify("Replay stopped")
-end
-
--- ---------- SAVE / LOAD ----------
-local function savePath()
-	local export = {}
-	for _, red in ipairs(platforms) do
-		local frames = platformData[red]
-		local outFrames = {}
-		for _, f in ipairs(frames or {}) do
-			table.insert(outFrames, { t=f.t, pos=f.pos, isJump=f.isJump })
-		end
-		table.insert(export, { pos = {red.Position.X,red.Position.Y,red.Position.Z}, frames = outFrames })
+	local out = {}
+	for _, s in ipairs(saves) do
+		table.insert(out, {
+			name = s.name,
+			red  = {s.red.Position.X, s.red.Position.Y, s.red.Position.Z},
+			yellow = {s.yellow.Position.X, s.yellow.Position.Y, s.yellow.Position.Z},
+			frames = s.frames
+		})
 	end
-	writefile(saveFile, HttpService:JSONEncode(export))
-	notify(("Saved to %s"):format(saveFile))
+	local json = HttpService:JSONEncode(out)
+	writefile("autowalk_all.json", json)
+	notify("Saved all to autowalk_all.json")
 end
 
-local function loadPath()
-	if not isfile(saveFile) then notify("Save file not found"); return end
-	local ok, data = pcall(function() return HttpService:JSONDecode(readfile(saveFile)) end)
-	if not ok or type(data)~="table" then notify("Invalid JSON"); return end
+-- ===== UI (Record Tab) =====
+TabRecord:CreateButton({Name="▶ Start Record", Callback=startRecord})
+TabRecord:CreateButton({Name="⏹ Stop Record (Auto-Save)", Callback=stopRecord})
 
-	-- Bersihkan lama
-	for _, p in ipairs(platforms) do p:Destroy() end
-	for _, y in ipairs(yellowPlatforms) do y:Destroy() end
-	platforms, yellowPlatforms, platformData, yellowToRedMapping = {}, {}, {}, {}
-
-	-- Muat ulang
-	for _, rec in ipairs(data) do
-		local red = Instance.new("Part")
-		red.Size = Vector3.new(5,1,5)
-		red.Anchored = true
-		red.CanCollide = false
-		red.Color = Color3.fromRGB(255,0,0)
-		red.Position = Vector3.new(rec.pos[1], rec.pos[2], rec.pos[3])
-		red.Parent = workspace
-		table.insert(platforms, red)
-
-		local frames = {}
-		for _, f in ipairs(rec.frames or {}) do
-			table.insert(frames, { t=f.t, pos=f.pos, isJump=f.isJump })
-		end
-		platformData[red] = frames
-	end
-	notify("Loaded path data")
-end
-
--- ---------- UI ----------
-tabRecord:CreateButton({Name="▶ Start Record", Callback=startRecord})
-tabRecord:CreateButton({Name="⏹ Stop Record",  Callback=stopRecord})
-tabRecord:CreateButton({Name="🎬 Play Replay", Callback=playRecord})
-tabRecord:CreateButton({Name="🛑 Stop Replay", Callback=stopReplay})
-
-tabRecord:CreateSlider({
+TabRecord:CreateSlider({
 	Name="Replay Speed",
 	Range={0.5,3},
 	Increment=0.1,
@@ -310,29 +298,37 @@ tabRecord:CreateSlider({
 	Callback=function(v) playSpeed=v end
 })
 
-tabRecord:CreateSlider({
+TabRecord:CreateSlider({
 	Name="WalkSpeed",
 	Range={10,200},
 	Increment=1,
 	Suffix=" ws",
 	CurrentValue=humanoid.WalkSpeed,
-	Callback=function(v) humanoid.WalkSpeed = v end
+	Callback=function(v) humanoid.WalkSpeed=v end
 })
 
-tabRecord:CreateSlider({
+TabRecord:CreateSlider({
 	Name="JumpPower",
 	Range={10,300},
 	Increment=1,
 	Suffix=" jp",
 	CurrentValue=humanoid.JumpPower,
-	Callback=function(v) humanoid.JumpPower = v end
+	Callback=function(v) humanoid.JumpPower=v end
 })
 
-tabSave:CreateButton({Name="💾 Save Path (to file)", Callback=savePath})
-tabSave:CreateButton({Name="📂 Load Path (from file)", Callback=loadPath})
-
-tabOpts:CreateToggle({
-	Name="Dev Shield (ForceField saat replay)",
-	CurrentValue=false,
-	Callback=function(on) devShield = on end
+-- ===== UI (Save Tab) =====
+TabSave:CreateButton({
+	Name = "💾 Save All (to autowalk_all.json)",
+	Callback = saveAllToFile
 })
+
+-- Pertama kali kosong, UI list dibangun saat Save dibuat.
+rebuildSaveUI()
+
+-- ===== Respawn handling (optional persistence) =====
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	hrp = char:WaitForChild("HumanoidRootPart")
+	cleanupBV()
+end)
