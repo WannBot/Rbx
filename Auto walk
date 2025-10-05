@@ -1,24 +1,40 @@
+-- GUI Rebuild: Clean & Modern UI
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
+
+-- Tunggu PlayerGui siap
+local PlayerGui = player:WaitForChild("PlayerGui", 5)
+if not PlayerGui then
+    warn("[RecorderUI] PlayerGui tidak ditemukan!")
+    return
+end
+
+-- Pastikan tidak dobel
+if PlayerGui:FindFirstChild("RecorderUI") then
+    PlayerGui.RecorderUI:Destroy()
+end
+
 -- Create ScreenGui
 local screenGui = Instance.new("ScreenGui")
-screenGui.Parent = player:WaitForChild("PlayerGui")
-screenGui.ResetOnSpawn = false
 screenGui.Name = "RecorderUI"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = PlayerGui
 
--- Main container
+-- Main frame
 local mainFrame = Instance.new("Frame")
-mainFrame.Parent = screenGui
+mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 260, 0, 250)
 mainFrame.Position = UDim2.new(0.5, -130, 0.5, -125)
-mainFrame.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+mainFrame.BackgroundColor3 = Color3.fromRGB(245, 245, 245)
 mainFrame.BorderSizePixel = 0
-mainFrame.BackgroundTransparency = 0
 mainFrame.Active = true
 mainFrame.Draggable = true
-mainFrame.Name = "MainFrame"
+mainFrame.Parent = screenGui
 
--- Shadow / rounding
-local uicorner = Instance.new("UICorner", mainFrame)
-uicorner.CornerRadius = UDim.new(0, 12)
+local corner = Instance.new("UICorner", mainFrame)
+corner.CornerRadius = UDim.new(0, 12)
 
 -- Status label
 local statusLabel = Instance.new("TextLabel")
@@ -27,12 +43,11 @@ statusLabel.Size = UDim2.new(1, -20, 0, 30)
 statusLabel.Position = UDim2.new(0, 10, 0, 10)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Status: Idle"
-statusLabel.TextColor3 = Color3.fromRGB(30, 30, 30)
+statusLabel.TextColor3 = Color3.fromRGB(40, 40, 40)
 statusLabel.Font = Enum.Font.GothamBold
 statusLabel.TextScaled = true
-statusLabel.Name = "StatusLabel"
 
--- Create layout for buttons
+-- Button container
 local buttonContainer = Instance.new("Frame")
 buttonContainer.Parent = mainFrame
 buttonContainer.Size = UDim2.new(1, -20, 0, 170)
@@ -42,11 +57,10 @@ buttonContainer.BackgroundTransparency = 1
 local grid = Instance.new("UIGridLayout", buttonContainer)
 grid.CellSize = UDim2.new(0, 120, 0, 40)
 grid.CellPadding = UDim2.new(0, 10, 0, 10)
-grid.FillDirectionMaxCells = 2
 grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
 grid.VerticalAlignment = Enum.VerticalAlignment.Top
 
--- Function to create buttons
+-- Button factory
 local function makeButton(name, color)
 	local btn = Instance.new("TextButton")
 	btn.Parent = buttonContainer
@@ -56,8 +70,8 @@ local function makeButton(name, color)
 	btn.TextScaled = true
 	btn.BackgroundColor3 = color
 	btn.TextColor3 = Color3.new(1, 1, 1)
-	local corner = Instance.new("UICorner", btn)
-	corner.CornerRadius = UDim.new(0, 8)
+	local c = Instance.new("UICorner", btn)
+	c.CornerRadius = UDim.new(0, 8)
 	return btn
 end
 
@@ -70,11 +84,11 @@ local deleteButton = makeButton("Delete", Color3.fromRGB(220, 53, 69))
 local saveButton = makeButton("Save", Color3.fromRGB(40, 167, 69))
 local nextChunkButton = makeButton("Next Chunk", Color3.fromRGB(0, 123, 255))
 
--- Floating minimize & close buttons
+-- Floating Minimize and Close Buttons
 local closeButton = Instance.new("ImageButton")
 closeButton.Parent = screenGui
 closeButton.Size = UDim2.new(0, 40, 0, 40)
-closeButton.Position = UDim2.new(1, -60, 0.2, 0)
+closeButton.Position = UDim2.new(1, -60, 0.25, 0)
 closeButton.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
 closeButton.Image = "rbxassetid://6031094678" -- X icon
 Instance.new("UICorner", closeButton).CornerRadius = UDim.new(1, 0)
@@ -82,18 +96,21 @@ Instance.new("UICorner", closeButton).CornerRadius = UDim.new(1, 0)
 local minimizeButton = Instance.new("ImageButton")
 minimizeButton.Parent = screenGui
 minimizeButton.Size = UDim2.new(0, 40, 0, 40)
-minimizeButton.Position = UDim2.new(1, -110, 0.2, 0)
+minimizeButton.Position = UDim2.new(1, -110, 0.25, 0)
 minimizeButton.BackgroundColor3 = Color3.fromRGB(255, 195, 0)
 minimizeButton.Image = "rbxassetid://6035067836" -- dash icon
 Instance.new("UICorner", minimizeButton).CornerRadius = UDim.new(1, 0)
 
--- Minimize & Close logic
+-- Minimize logic
 local minimized = false
 minimizeButton.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	mainFrame.Visible = not minimized
 end)
 
+-- Close logic
 closeButton.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
+
+print("[RecorderUI] ✅ GUI berhasil dimuat.")
