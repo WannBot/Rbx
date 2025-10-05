@@ -921,38 +921,6 @@ saveToFileButton.MouseButton1Click:Connect(function()
         warn("Save failed:", err)
     end
 end)
-		
--- First, serialize all platform data
-local jsonData = serializePlatformData()
-
--- Check if data is too large for clipboard  
-if #jsonData > 190000 then -- Around the limit for most clipboards  
-    -- Split the data into chunks based on platforms  
-    local allData = HttpService:JSONDecode(jsonData)  
-    saveChunks = {}  
-      
-    -- Calculate how many chunks we need  
-    local redPlatformsCount = #allData.redPlatforms  
-    totalChunks = math.ceil(redPlatformsCount / CHUNK_SIZE)  
-      
-    -- Create chunks of platform data  
-    for chunkIndex = 1, totalChunks do  
-        local startIndex = (chunkIndex-1) * CHUNK_SIZE + 1  
-        local endIndex = math.min(chunkIndex * CHUNK_SIZE, redPlatformsCount)  
-          
-        -- Create a chunk with the appropriate platforms  
-        local chunk = {  
-            redPlatforms = {},  
-            yellowPlatforms = {},  
-            mappings = {}  
-        }  
-          
-        -- Add red platforms for this chunk  
-        for i = startIndex, endIndex do  
-            if i <= redPlatformsCount then  
-                table.insert(chunk.redPlatforms, allData.redPlatforms[i])  
-            end  
-        end  
           
         -- Find and add only the yellow platforms that map to these red platforms  
         for i, mapping in ipairs(allData.mappings) do  
