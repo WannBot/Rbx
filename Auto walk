@@ -1,10 +1,11 @@
+-- ⚙️ Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 
--- === Rayfield UI ===
+-- ⚙️ Rayfield UI (versi asli)
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
 	Name = "Real Recorder",
@@ -14,20 +15,18 @@ local Window = Rayfield:CreateWindow({
 })
 local Tab = Window:CreateTab("Path Tool", 4483362458)
 
--- === State ===
+-- ⚙️ State
 local hrp, hum
 local recording = false
 local playing = false
 local pathData = {}
-local recordConn
-local playConn
+local recordConn, playConn, jumpConn
 local startTime
-local playSpeed = 1 -- default 1x
+local playSpeed = 1
 local BV -- BodyVelocity
-local lastJumpState = false
 local saveFile = "pathrecord.json"
 
--- === Helper ===
+-- ⚙️ Helper
 local function bindChar()
 	local char = player.Character or player.CharacterAdded:Wait()
 	hum = char:WaitForChild("Humanoid")
@@ -37,7 +36,7 @@ bindChar()
 player.CharacterAdded:Connect(bindChar)
 
 ----------------------------------------------------------
--- === Record Path ===
+-- === Record Path (dengan deteksi Jump 100%) ===
 ----------------------------------------------------------
 local function startRecord()
 	if recording then return end
@@ -46,36 +45,28 @@ local function startRecord()
 	startTime = tick()
 	print("[RealRecord] Start recording...")
 
-	lastJumpState = false
-
+	-- Deteksi posisi tiap frame
 	recordConn = RunService.Heartbeat:Connect(function()
-		if recording and hrp and hum then
-			-- Catat posisi setiap frame
+		if recording and hrp then
 			table.insert(pathData, {
 				t = tick() - startTime,
 				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
 				vel = hum.MoveDirection.Magnitude,
 				type = "move"
 			})
+		end
+	end)
 
-			-- Deteksi jump manual (termasuk double jump, jatuh, loncat cepat)
-			local state = hum:GetState()
-			local isJumping = (
-				state == Enum.HumanoidStateType.Jumping or
-				state == Enum.HumanoidStateType.Freefall
-			)
-
-			if isJumping and not lastJumpState then
-				lastJumpState = true
-				table.insert(pathData, {
-					t = tick() - startTime,
-					pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-					vel = 0,
-					type = "jump"
-				})
-			elseif not isJumping then
-				lastJumpState = false
-			end
+	-- Deteksi loncat via input langsung (super akurat)
+	jumpConn = UserInputService.JumpRequest:Connect(function()
+		if recording and hrp then
+			table.insert(pathData, {
+				t = tick() - startTime,
+				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+				vel = 0,
+				type = "jump"
+			})
+			print("[RealRecord] Jump recorded at t=" .. math.floor((tick() - startTime)*100)/100)
 		end
 	end)
 end
@@ -84,11 +75,12 @@ local function stopRecord()
 	if not recording then return end
 	recording = false
 	if recordConn then recordConn:Disconnect() recordConn = nil end
+	if jumpConn then jumpConn:Disconnect() jumpConn = nil end
 	print("[RealRecord] Stop. Frames:", #pathData)
 end
 
 ----------------------------------------------------------
--- === Play Path (BodyVelocity + Orientasi) ===
+-- === Play Path (BodyVelocity + orientasi + jump) ===
 ----------------------------------------------------------
 local function ensureBV()
 	if not BV or not BV.Parent then
@@ -134,7 +126,6 @@ local function playPath()
 		if not playing then return end
 		local elapsed = (tick() - playStart) * playSpeed
 
-		-- Jalankan semua frame yang waktunya sudah lewat
 		while i <= #pathData and elapsed >= pathData[i].t do
 			local step = pathData[i]
 			if step.type == "jump" then
@@ -144,7 +135,6 @@ local function playPath()
 		end
 
 		if i > #pathData then
-			BV.Velocity = Vector3.zero
 			cleanupBV()
 			playing = false
 			if playConn then playConn:Disconnect() end
@@ -152,6 +142,7 @@ local function playPath()
 			return
 		end
 
+		-- Arah gerak per frame
 		local stepNow = pathData[i]
 		if stepNow and stepNow.type == "move" then
 			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
@@ -163,7 +154,7 @@ local function playPath()
 			if dist > 0.5 then
 				local moveDir = horizontal.Unit * baseSpeed
 				BV.Velocity = Vector3.new(moveDir.X, 0, moveDir.Z)
-				-- Rotasi avatar agar menghadap ke arah gerak
+				-- Rotasi karakter ke arah gerak
 				local lookAtPos = hrp.Position + horizontal
 				hrp.CFrame = CFrame.lookAt(hrp.Position, lookAtPos)
 			else
@@ -183,7 +174,7 @@ local function stopPlay()
 end
 
 ----------------------------------------------------------
--- === SAVE / LOAD ===
+-- === Save / Load Path ke File JSON ===
 ----------------------------------------------------------
 local function savePath()
 	if #pathData == 0 then
