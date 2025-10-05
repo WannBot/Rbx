@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 
 -- === Rayfield UI ===
@@ -18,11 +19,13 @@ local hrp, hum
 local recording = false
 local playing = false
 local pathData = {}
-local recordConn, jumpConn
+local recordConn
 local playConn
 local startTime
 local playSpeed = 1 -- default 1x
-local BV -- BodyVelocity instance
+local BV -- BodyVelocity
+local lastJumpState = false
+local saveFile = "pathrecord.json"
 
 -- === Helper ===
 local function bindChar()
@@ -33,7 +36,9 @@ end
 bindChar()
 player.CharacterAdded:Connect(bindChar)
 
+----------------------------------------------------------
 -- === Record Path ===
+----------------------------------------------------------
 local function startRecord()
 	if recording then return end
 	recording = true
@@ -41,25 +46,36 @@ local function startRecord()
 	startTime = tick()
 	print("[RealRecord] Start recording...")
 
+	lastJumpState = false
+
 	recordConn = RunService.Heartbeat:Connect(function()
 		if recording and hrp and hum then
+			-- Catat posisi setiap frame
 			table.insert(pathData, {
 				t = tick() - startTime,
 				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				vel = hum.MoveDirection.Magnitude, -- 0 or 1 (direction magnitude)
+				vel = hum.MoveDirection.Magnitude,
 				type = "move"
 			})
-		end
-	end)
 
-	jumpConn = hum.StateChanged:Connect(function(_, new)
-		if recording and new == Enum.HumanoidStateType.Jumping then
-			table.insert(pathData, {
-				t = tick() - startTime,
-				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				vel = 0,
-				type = "jump"
-			})
+			-- Deteksi jump manual (termasuk double jump, jatuh, loncat cepat)
+			local state = hum:GetState()
+			local isJumping = (
+				state == Enum.HumanoidStateType.Jumping or
+				state == Enum.HumanoidStateType.Freefall
+			)
+
+			if isJumping and not lastJumpState then
+				lastJumpState = true
+				table.insert(pathData, {
+					t = tick() - startTime,
+					pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
+					vel = 0,
+					type = "jump"
+				})
+			elseif not isJumping then
+				lastJumpState = false
+			end
 		end
 	end)
 end
@@ -68,11 +84,31 @@ local function stopRecord()
 	if not recording then return end
 	recording = false
 	if recordConn then recordConn:Disconnect() recordConn = nil end
-	if jumpConn then jumpConn:Disconnect() jumpConn = nil end
 	print("[RealRecord] Stop. Frames:", #pathData)
 end
 
--- === Play Path (BodyVelocity) ===
+----------------------------------------------------------
+-- === Play Path (BodyVelocity + Orientasi) ===
+----------------------------------------------------------
+local function ensureBV()
+	if not BV or not BV.Parent then
+		BV = Instance.new("BodyVelocity")
+		BV.MaxForce = Vector3.new(1e5, 0, 1e5)
+		BV.P = 1e4
+		BV.Velocity = Vector3.zero
+		BV.Parent = hrp
+	end
+end
+
+local function cleanupBV()
+	if BV then
+		pcall(function() BV.Velocity = Vector3.zero end)
+		pcall(function() BV:Destroy() end)
+		BV = nil
+	end
+	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
+end
+
 local function playPath()
 	if #pathData == 0 then
 		warn("[RealRecord] Tidak ada data record!")
@@ -88,19 +124,9 @@ local function playPath()
 	playing = true
 	print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
 
-	-- siapkan BodyVelocity
-	if BV then BV:Destroy() end
-	BV = Instance.new("BodyVelocity")
-	BV.MaxForce = Vector3.new(1e5, 0, 1e5)
-	BV.P = 1e4
-	BV.Velocity = Vector3.zero
-	BV.Parent = hrp
-
+	ensureBV()
 	local playStart = tick()
 	local i = 1
-
-	-- pastikan orientasi normal di awal
-	hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + hrp.CFrame.LookVector)
 
 	if playConn then playConn:Disconnect() end
 
@@ -108,10 +134,9 @@ local function playPath()
 		if not playing then return end
 		local elapsed = (tick() - playStart) * playSpeed
 
+		-- Jalankan semua frame yang waktunya sudah lewat
 		while i <= #pathData and elapsed >= pathData[i].t do
 			local step = pathData[i]
-
-			-- Loncat manual
 			if step.type == "jump" then
 				hum.Jump = true
 			end
@@ -120,28 +145,25 @@ local function playPath()
 
 		if i > #pathData then
 			BV.Velocity = Vector3.zero
-			BV:Destroy()
-			BV = nil
+			cleanupBV()
 			playing = false
 			if playConn then playConn:Disconnect() end
 			print("[RealRecord] Done.")
 			return
 		end
 
-		-- Gerak ke target berikutnya
 		local stepNow = pathData[i]
 		if stepNow and stepNow.type == "move" then
 			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
 			local dir = (target - hrp.Position)
 			local horizontal = Vector3.new(dir.X, 0, dir.Z)
 			local dist = horizontal.Magnitude
-			local baseSpeed = hum.WalkSpeed * playSpeed
+			local baseSpeed = (hum.WalkSpeed or 16) * playSpeed
 
 			if dist > 0.5 then
 				local moveDir = horizontal.Unit * baseSpeed
 				BV.Velocity = Vector3.new(moveDir.X, 0, moveDir.Z)
-
-				-- rotasi avatar menghadap arah gerak
+				-- Rotasi avatar agar menghadap ke arah gerak
 				local lookAtPos = hrp.Position + horizontal
 				hrp.CFrame = CFrame.lookAt(hrp.Position, lookAtPos)
 			else
@@ -149,75 +171,53 @@ local function playPath()
 			end
 		end
 	end)
-endlocal function ensureBV()
-	-- create BodyVelocity if not exists
-	if not BV or not BV.Parent then
-		BV = Instance.new("BodyVelocity")
-		-- cukup besar agar bisa mengatasi gesekan dan slope; tapi jangan pengaruh vertical
-		BV.MaxForce = Vector3.new(1e5, 0, 1e5)
-		BV.P = 1e4
-		BV.Velocity = Vector3.new(0, 0, 0)
-		BV.Parent = hrp
-	end
 end
-
-local function cleanupBV()
-	if BV then
-		-- reset velocity dulu
-		pcall(function()
-			BV.Velocity = Vector3.zero
-		end)
-		pcall(function() BV:Destroy() end)
-		BV = nil
-	end
-	-- juga reset assembly velocity supaya tidak ngesot setelah berhenti
-	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
-end
-
-
 
 local function stopPlay()
-	if not playing then
-		print("[RealRecord] Play already stopped.")
-		return
-	end
+	if not playing then return end
 	playing = false
-	if playConn then
-		playConn:Disconnect()
-		playConn = nil
-	end
+	if playConn then playConn:Disconnect() playConn = nil end
 	cleanupBV()
-	-- pastikan humanoid berhenti bergerak
-	if hum then
-		pcall(function() hum:Move(Vector3.zero) end)
-	end
+	if hum then hum:Move(Vector3.zero) end
 	print("[RealRecord] Play stopped.")
 end
 
+----------------------------------------------------------
+-- === SAVE / LOAD ===
+----------------------------------------------------------
+local function savePath()
+	if #pathData == 0 then
+		warn("[RealRecord] Tidak ada data untuk disimpan!")
+		return
+	end
+	local json = HttpService:JSONEncode(pathData)
+	writefile(saveFile, json)
+	print("[RealRecord] Path disimpan ke:", saveFile, "| Frames:", #pathData)
+end
+
+local function loadPath()
+	if not isfile(saveFile) then
+		warn("[RealRecord] File", saveFile, "tidak ditemukan!")
+		return
+	end
+	local data = readfile(saveFile)
+	pathData = HttpService:JSONDecode(data)
+	print("[RealRecord] Path dimuat dari:", saveFile, "| Frames:", #pathData)
+end
+
+----------------------------------------------------------
 -- === UI ===
-Tab:CreateButton({
-	Name = "Start Record",
-	Callback = startRecord
-})
-
-Tab:CreateButton({
-	Name = "Stop Record",
-	Callback = stopRecord
-})
-
-Tab:CreateButton({
-	Name = "Play Last Record",
-	Callback = playPath
-})
-
-Tab:CreateButton({
-	Name = "Stop Play",
-	Callback = stopPlay
-})
+----------------------------------------------------------
+Tab:CreateButton({ Name = "Start Record", Callback = startRecord })
+Tab:CreateButton({ Name = "Stop Record", Callback = stopRecord })
+Tab:CreateButton({ Name = "Play Last Record", Callback = playPath })
+Tab:CreateButton({ Name = "Stop Play", Callback = stopPlay })
+Tab:CreateButton({ Name = "💾 Save Path ke JSON", Callback = savePath })
+Tab:CreateButton({ Name = "📂 Load Path dari JSON", Callback = loadPath })
 
 Tab:CreateSlider({
 	Name = "Replay Speed",
-	Range = {0.5, 3}, -- 0.5x sampai 3x
+	Range = {0.5, 3},
 	Increment = 0.1,
 	Suffix = "x",
 	CurrentValue = 1,
@@ -229,7 +229,7 @@ Tab:CreateSlider({
 
 Tab:CreateSlider({
 	Name = "WalkSpeed",
-	Range = {10, 200}, -- normal 16
+	Range = {10, 200},
 	Increment = 1,
 	Suffix = " ws",
 	CurrentValue = 16,
@@ -241,7 +241,7 @@ Tab:CreateSlider({
 
 Tab:CreateSlider({
 	Name = "JumpPower",
-	Range = {10, 300}, -- normal 50
+	Range = {10, 300},
 	Increment = 1,
 	Suffix = " jp",
 	CurrentValue = 50,
