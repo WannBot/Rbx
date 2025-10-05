@@ -32,11 +32,11 @@ frame.Draggable = true
 local header = Instance.new("Frame")
 header.Parent = frame
 header.Size = UDim2.new(1, 0, 0, 25)
-header.Position = UDim2.new(0, 0, 0, -25)
+header.Position = UDim2.new(0, 0, 0, 0)
 header.BackgroundColor3 = Color3.fromRGB(30, 60, 120)
 header.BorderSizePixel = 0
-header.Active = true
-header.Draggable = true
+header.Active = false
+header.Draggable = false
 
 local headerTitle = Instance.new("TextLabel")
 headerTitle.Parent = header
@@ -72,6 +72,31 @@ minimizeButton.Image = "rbxassetid://6035067836" -- icon minimize
 minimizeButton.Size = UDim2.new(0, 18, 0, 18)
 minimizeButton.Position = UDim2.new(1, -75, 0.5, -9)
 minimizeButton.BackgroundTransparency = 1
+
+-- Drag frame by clicking header
+local dragging = false
+local dragStart, startPos
+
+header.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = frame.Position
+	end
+end)
+
+header.InputChanged:Connect(function(input)
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - dragStart
+		frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+game:GetService("UserInputService").InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
 
 -- Logika tombol
 local isMinimized = false
