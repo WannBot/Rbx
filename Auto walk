@@ -19,9 +19,10 @@ local recording = false
 local playing = false
 local pathData = {}
 local recordConn, jumpConn
+local playConn
 local startTime
 local playSpeed = 1 -- default 1x
-local saveFile = "pathrecord.json" -- nama file JSON
+local BV -- BodyVelocity instance
 
 -- === Helper ===
 local function bindChar()
@@ -41,11 +42,11 @@ local function startRecord()
 	print("[RealRecord] Start recording...")
 
 	recordConn = RunService.Heartbeat:Connect(function()
-		if recording and hrp then
+		if recording and hrp and hum then
 			table.insert(pathData, {
 				t = tick() - startTime,
 				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				vel = hum.MoveDirection.Magnitude,
+				vel = hum.MoveDirection.Magnitude, -- 0 or 1 (direction magnitude)
 				type = "move"
 			})
 		end
@@ -71,65 +72,132 @@ local function stopRecord()
 	print("[RealRecord] Stop. Frames:", #pathData)
 end
 
--- === Play Path ===
+-- === Play Path (BodyVelocity) ===
+local function ensureBV()
+	-- create BodyVelocity if not exists
+	if not BV or not BV.Parent then
+		BV = Instance.new("BodyVelocity")
+		-- cukup besar agar bisa mengatasi gesekan dan slope; tapi jangan pengaruh vertical
+		BV.MaxForce = Vector3.new(1e5, 0, 1e5)
+		BV.P = 1e4
+		BV.Velocity = Vector3.new(0, 0, 0)
+		BV.Parent = hrp
+	end
+end
+
+local function cleanupBV()
+	if BV then
+		-- reset velocity dulu
+		pcall(function()
+			BV.Velocity = Vector3.zero
+		end)
+		pcall(function() BV:Destroy() end)
+		BV = nil
+	end
+	-- juga reset assembly velocity supaya tidak ngesot setelah berhenti
+	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
+end
+
 local function playPath()
 	if #pathData == 0 then
 		warn("[RealRecord] Tidak ada data record!")
 		return
 	end
 	if playing then return end
+	if not hrp or not hum then
+		warn("[RealRecord] Character belum siap.")
+		return
+	end
+
+	-- disable recording while playing
+	if recording then stopRecord() end
+
 	playing = true
 	print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
 
-	task.spawn(function()
-		local playStart = tick()
-		local i = 1
-		while playing and i <= #pathData do
-			local step = pathData[i]
-			local elapsed = (tick() - playStart) * playSpeed
+	-- siapkan BV
+	ensureBV()
 
-			if elapsed >= step.t then
-				if step.type == "move" then
-					local target = Vector3.new(step.pos[1], step.pos[2], step.pos[3])
-					hum:MoveTo(target)
-				elseif step.type == "jump" then
-					hum:ChangeState(Enum.HumanoidStateType.Jumping)
-				end
-				i = i + 1
-			else
-				task.wait(0.01)
+	local playStart = tick()
+	local i = 1
+
+	-- jika sudah ada koneksi playConn sebelumnya, disconnect
+	if playConn then
+		playConn:Disconnect()
+		playConn = nil
+	end
+
+	playConn = RunService.Heartbeat:Connect(function(delta)
+		if not playing then return end
+		local elapsed = (tick() - playStart) * playSpeed
+
+		-- proses semua step yang waktunya sudah lewat (bisa lebih dari 1)
+		while i <= #pathData and elapsed >= pathData[i].t do
+			local step = pathData[i]
+			-- untuk jump kita lakukan hum.Jump (agar humanoid bereaksi normal)
+			if step.type == "jump" then
+				-- set jump true; ChangeState kadang juga bisa dipakai
+				hum.Jump = true
 			end
+			-- next step akan di-handle di loop BV di bawah
+			i = i + 1
 		end
-		playing = false
-		print("[RealRecord] Done.")
+
+		-- jika sudah mencapai akhir
+		if i > #pathData then
+			-- hentikan BV dan stop playback
+			cleanupBV()
+			playing = false
+			print("[RealRecord] Done.")
+			if playConn then playConn:Disconnect() playConn = nil end
+			return
+		end
+
+		-- sekarang target adalah posisi step i (posisi yang ingin kita capai sekarang)
+		local stepNow = pathData[i]
+		if stepNow and stepNow.type == "move" then
+			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
+			local dir = (target - hrp.Position)
+			local horizontal = Vector3.new(dir.X, 0, dir.Z)
+			local dist = horizontal.Magnitude
+
+			-- prefer gunakan WalkSpeed/current hum.WalkSpeed sebagai basis speed
+			local baseSpeed = (hum and hum.WalkSpeed) and hum.WalkSpeed or 16
+			local desiredSpeed = baseSpeed * playSpeed
+
+			if dist > 0.8 then
+				-- atur BV ke arah target (jaga Y velocity agar gravity tetap bekerja)
+				local velY = hrp.AssemblyLinearVelocity and hrp.AssemblyLinearVelocity.Y or 0
+				local newVel = horizontal.Unit * desiredSpeed
+				BV.Velocity = Vector3.new(newVel.X, 0, newVel.Z)
+			else
+				-- sudah dekat target: stop BV sedikit supaya tidak overshoot
+				BV.Velocity = Vector3.zero
+				-- advance ke next frame (biarkan loop while di atas menangani increment berdasarkan waktu)
+			end
+		else
+			-- jika bukan move (misal pas step sekarang adalah jump karena sequence), biarkan BV nol
+			BV.Velocity = Vector3.zero
+		end
 	end)
 end
 
 local function stopPlay()
+	if not playing then
+		print("[RealRecord] Play already stopped.")
+		return
+	end
 	playing = false
-	if hum then hum:Move(Vector3.new(0,0,0)) end
+	if playConn then
+		playConn:Disconnect()
+		playConn = nil
+	end
+	cleanupBV()
+	-- pastikan humanoid berhenti bergerak
+	if hum then
+		pcall(function() hum:Move(Vector3.zero) end)
+	end
 	print("[RealRecord] Play stopped.")
-end
-
--- === SAVE / LOAD PATH ===
-local function savePath()
-	if #pathData == 0 then
-		warn("[RealRecord] Tidak ada data untuk disimpan!")
-		return
-	end
-	local json = HttpService:JSONEncode(pathData)
-	writefile(saveFile, json)
-	print("[RealRecord] Path disimpan ke file:", saveFile, "| Frames:", #pathData)
-end
-
-local function loadPath()
-	if not isfile(saveFile) then
-		warn("[RealRecord] File", saveFile, "tidak ditemukan!")
-		return
-	end
-	local data = readfile(saveFile)
-	pathData = HttpService:JSONDecode(data)
-	print("[RealRecord] Path dimuat dari:", saveFile, "| Frames:", #pathData)
 end
 
 -- === UI ===
@@ -151,17 +219,6 @@ Tab:CreateButton({
 Tab:CreateButton({
 	Name = "Stop Play",
 	Callback = stopPlay
-})
-
--- Tombol tambahan Save / Load JSON
-Tab:CreateButton({
-	Name = "💾 Save Path ke JSON",
-	Callback = savePath
-})
-
-Tab:CreateButton({
-	Name = "📂 Load Path dari JSON",
-	Callback = loadPath
 })
 
 Tab:CreateSlider({
