@@ -1,243 +1,99 @@
--- ⚙️ Services
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local UserInputService = game:GetService("UserInputService")
-local player = Players.LocalPlayer
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false
+screenGui.Name = "RecorderUI"
 
--- ⚙️ Rayfield UI (versi asli)
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-local Window = Rayfield:CreateWindow({
-	Name = "Real Recorder",
-	LoadingTitle = "Init",
-	LoadingSubtitle = "Record & Replay Real",
-	KeySystem = false,
-})
-local Tab = Window:CreateTab("Path Tool", 4483362458)
+-- Main container
+local mainFrame = Instance.new("Frame")
+mainFrame.Parent = screenGui
+mainFrame.Size = UDim2.new(0, 260, 0, 250)
+mainFrame.Position = UDim2.new(0.5, -130, 0.5, -125)
+mainFrame.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
+mainFrame.BorderSizePixel = 0
+mainFrame.BackgroundTransparency = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Name = "MainFrame"
 
--- ⚙️ State
-local hrp, hum
-local recording = false
-local playing = false
-local pathData = {}
-local recordConn, playConn, jumpConn
-local startTime
-local playSpeed = 1
-local BV -- BodyVelocity
-local saveFile = "pathrecord.json"
+-- Shadow / rounding
+local uicorner = Instance.new("UICorner", mainFrame)
+uicorner.CornerRadius = UDim.new(0, 12)
 
--- ⚙️ Helper
-local function bindChar()
-	local char = player.Character or player.CharacterAdded:Wait()
-	hum = char:WaitForChild("Humanoid")
-	hrp = char:WaitForChild("HumanoidRootPart")
-end
-bindChar()
-player.CharacterAdded:Connect(bindChar)
+-- Status label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Parent = mainFrame
+statusLabel.Size = UDim2.new(1, -20, 0, 30)
+statusLabel.Position = UDim2.new(0, 10, 0, 10)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "Status: Idle"
+statusLabel.TextColor3 = Color3.fromRGB(30, 30, 30)
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.TextScaled = true
+statusLabel.Name = "StatusLabel"
 
-----------------------------------------------------------
--- === Record Path (dengan deteksi Jump 100%) ===
-----------------------------------------------------------
-local function startRecord()
-	if recording then return end
-	recording = true
-	pathData = {}
-	startTime = tick()
-	print("[RealRecord] Start recording...")
+-- Create layout for buttons
+local buttonContainer = Instance.new("Frame")
+buttonContainer.Parent = mainFrame
+buttonContainer.Size = UDim2.new(1, -20, 0, 170)
+buttonContainer.Position = UDim2.new(0, 10, 0, 50)
+buttonContainer.BackgroundTransparency = 1
 
-	-- Deteksi posisi tiap frame
-	recordConn = RunService.Heartbeat:Connect(function()
-		if recording and hrp then
-			table.insert(pathData, {
-				t = tick() - startTime,
-				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				vel = hum.MoveDirection.Magnitude,
-				type = "move"
-			})
-		end
-	end)
+local grid = Instance.new("UIGridLayout", buttonContainer)
+grid.CellSize = UDim2.new(0, 120, 0, 40)
+grid.CellPadding = UDim2.new(0, 10, 0, 10)
+grid.FillDirectionMaxCells = 2
+grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+grid.VerticalAlignment = Enum.VerticalAlignment.Top
 
-	-- Deteksi loncat via input langsung (super akurat)
-	jumpConn = UserInputService.JumpRequest:Connect(function()
-		if recording and hrp then
-			table.insert(pathData, {
-				t = tick() - startTime,
-				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				vel = 0,
-				type = "jump"
-			})
-			print("[RealRecord] Jump recorded at t=" .. math.floor((tick() - startTime)*100)/100)
-		end
-	end)
+-- Function to create buttons
+local function makeButton(name, color)
+	local btn = Instance.new("TextButton")
+	btn.Parent = buttonContainer
+	btn.Name = name
+	btn.Text = name
+	btn.Font = Enum.Font.GothamBold
+	btn.TextScaled = true
+	btn.BackgroundColor3 = color
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	local corner = Instance.new("UICorner", btn)
+	corner.CornerRadius = UDim.new(0, 8)
+	return btn
 end
 
-local function stopRecord()
-	if not recording then return end
-	recording = false
-	if recordConn then recordConn:Disconnect() recordConn = nil end
-	if jumpConn then jumpConn:Disconnect() jumpConn = nil end
-	print("[RealRecord] Stop. Frames:", #pathData)
-end
+-- Buttons
+local recordButton = makeButton("Record", Color3.fromRGB(220, 53, 69))
+local stopRecordButton = makeButton("Stop Record", Color3.fromRGB(255, 193, 7))
+local stopReplayButton = makeButton("Stop Replay", Color3.fromRGB(255, 87, 34))
+local destroyButton = makeButton("Destroy", Color3.fromRGB(108, 117, 125))
+local deleteButton = makeButton("Delete", Color3.fromRGB(220, 53, 69))
+local saveButton = makeButton("Save", Color3.fromRGB(40, 167, 69))
+local nextChunkButton = makeButton("Next Chunk", Color3.fromRGB(0, 123, 255))
 
-----------------------------------------------------------
--- === Play Path (BodyVelocity + orientasi + jump) ===
-----------------------------------------------------------
-local function ensureBV()
-	if not BV or not BV.Parent then
-		BV = Instance.new("BodyVelocity")
-		BV.MaxForce = Vector3.new(1e5, 0, 1e5)
-		BV.P = 1e4
-		BV.Velocity = Vector3.zero
-		BV.Parent = hrp
-	end
-end
+-- Floating minimize & close buttons
+local closeButton = Instance.new("ImageButton")
+closeButton.Parent = screenGui
+closeButton.Size = UDim2.new(0, 40, 0, 40)
+closeButton.Position = UDim2.new(1, -60, 0.2, 0)
+closeButton.BackgroundColor3 = Color3.fromRGB(255, 75, 75)
+closeButton.Image = "rbxassetid://6031094678" -- X icon
+Instance.new("UICorner", closeButton).CornerRadius = UDim.new(1, 0)
 
-local function cleanupBV()
-	if BV then
-		pcall(function() BV.Velocity = Vector3.zero end)
-		pcall(function() BV:Destroy() end)
-		BV = nil
-	end
-	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
-end
+local minimizeButton = Instance.new("ImageButton")
+minimizeButton.Parent = screenGui
+minimizeButton.Size = UDim2.new(0, 40, 0, 40)
+minimizeButton.Position = UDim2.new(1, -110, 0.2, 0)
+minimizeButton.BackgroundColor3 = Color3.fromRGB(255, 195, 0)
+minimizeButton.Image = "rbxassetid://6035067836" -- dash icon
+Instance.new("UICorner", minimizeButton).CornerRadius = UDim.new(1, 0)
 
-local function playPath()
-	if #pathData == 0 then
-		warn("[RealRecord] Tidak ada data record!")
-		return
-	end
-	if playing then return end
-	if not hrp or not hum then
-		warn("[RealRecord] Character belum siap.")
-		return
-	end
+-- Minimize & Close logic
+local minimized = false
+minimizeButton.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	mainFrame.Visible = not minimized
+end)
 
-	if recording then stopRecord() end
-	playing = true
-	print("[RealRecord] Playing... steps:", #pathData, " speed:", playSpeed.."x")
-
-	ensureBV()
-	local playStart = tick()
-	local i = 1
-
-	if playConn then playConn:Disconnect() end
-
-	playConn = RunService.Heartbeat:Connect(function(delta)
-		if not playing then return end
-		local elapsed = (tick() - playStart) * playSpeed
-
-		while i <= #pathData and elapsed >= pathData[i].t do
-			local step = pathData[i]
-			if step.type == "jump" then
-				hum.Jump = true
-			end
-			i += 1
-		end
-
-		if i > #pathData then
-			cleanupBV()
-			playing = false
-			if playConn then playConn:Disconnect() end
-			print("[RealRecord] Done.")
-			return
-		end
-
-		-- Arah gerak per frame
-		local stepNow = pathData[i]
-		if stepNow and stepNow.type == "move" then
-			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
-			local dir = (target - hrp.Position)
-			local horizontal = Vector3.new(dir.X, 0, dir.Z)
-			local dist = horizontal.Magnitude
-			local baseSpeed = (hum.WalkSpeed or 16) * playSpeed
-
-			if dist > 0.5 then
-				local moveDir = horizontal.Unit * baseSpeed
-				BV.Velocity = Vector3.new(moveDir.X, 0, moveDir.Z)
-				-- Rotasi karakter ke arah gerak
-				local lookAtPos = hrp.Position + horizontal
-				hrp.CFrame = CFrame.lookAt(hrp.Position, lookAtPos)
-			else
-				BV.Velocity = Vector3.zero
-			end
-		end
-	end)
-end
-
-local function stopPlay()
-	if not playing then return end
-	playing = false
-	if playConn then playConn:Disconnect() playConn = nil end
-	cleanupBV()
-	if hum then hum:Move(Vector3.zero) end
-	print("[RealRecord] Play stopped.")
-end
-
-----------------------------------------------------------
--- === Save / Load Path ke File JSON ===
-----------------------------------------------------------
-local function savePath()
-	if #pathData == 0 then
-		warn("[RealRecord] Tidak ada data untuk disimpan!")
-		return
-	end
-	local json = HttpService:JSONEncode(pathData)
-	writefile(saveFile, json)
-	print("[RealRecord] Path disimpan ke:", saveFile, "| Frames:", #pathData)
-end
-
-local function loadPath()
-	if not isfile(saveFile) then
-		warn("[RealRecord] File", saveFile, "tidak ditemukan!")
-		return
-	end
-	local data = readfile(saveFile)
-	pathData = HttpService:JSONDecode(data)
-	print("[RealRecord] Path dimuat dari:", saveFile, "| Frames:", #pathData)
-end
-
-----------------------------------------------------------
--- === UI ===
-----------------------------------------------------------
-Tab:CreateButton({ Name = "Start Record", Callback = startRecord })
-Tab:CreateButton({ Name = "Stop Record", Callback = stopRecord })
-Tab:CreateButton({ Name = "Play Last Record", Callback = playPath })
-Tab:CreateButton({ Name = "Stop Play", Callback = stopPlay })
-Tab:CreateButton({ Name = "💾 Save Path ke JSON", Callback = savePath })
-Tab:CreateButton({ Name = "📂 Load Path dari JSON", Callback = loadPath })
-
-Tab:CreateSlider({
-	Name = "Replay Speed",
-	Range = {0.5, 3},
-	Increment = 0.1,
-	Suffix = "x",
-	CurrentValue = 1,
-	Callback = function(v)
-		playSpeed = v
-		print("[RealRecord] Replay speed diatur:", v.."x")
-	end
-})
-
-Tab:CreateSlider({
-	Name = "WalkSpeed",
-	Range = {10, 200},
-	Increment = 1,
-	Suffix = " ws",
-	CurrentValue = 16,
-	Callback = function(v)
-		if hum then hum.WalkSpeed = v end
-		print("[RealRecord] WalkSpeed =", v)
-	end
-})
-
-Tab:CreateSlider({
-	Name = "JumpPower",
-	Range = {10, 300},
-	Increment = 1,
-	Suffix = " jp",
-	CurrentValue = 50,
-	Callback = function(v)
-		if hum then hum.JumpPower = v end
-		print("[RealRecord] JumpPower =", v)
-	end
-})
+closeButton.MouseButton1Click:Connect(function()
+	screenGui:Destroy()
+end)
