@@ -891,35 +891,50 @@ local currentChunkIndex = 0
 local totalChunks = 0
 local CHUNK_SIZE = 20 -- This is the number of platforms per chunk, adjust based on your clipboard size limits
 
--- === Tombol Save ke File JSON (Sederhana & Langsung ke Folder) ===
+-- Replace your existing saveButton.MouseButton1Click with this:
 local saveButton = Instance.new("TextButton")
 saveButton.Parent = frame
-saveButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+saveButton.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
 saveButton.Size = UDim2.new(0, 90, 0, 30)
 saveButton.Position = UDim2.new(0, 10, 0, 90)
-saveButton.Text = "💾 Save Path"
+saveButton.Text = "Save"
 saveButton.TextScaled = true
 
 saveButton.MouseButton1Click:Connect(function()
+    local jsonData = serializePlatformData()
     local folderPath = "AutoWalk"
-    if not isfolder(folderPath) then
+
+    -- Buat folder jika belum ada
+    if makefolder and not isfolder(folderPath) then
         makefolder(folderPath)
     end
 
-    local jsonData = serializePlatformData()
-    local fileName = folderPath.."/AutoWalk_Session_"..tostring(os.time())..".json"
+    -- Tentukan nama file
+    local fileName = folderPath .. "/AutoWalk_Path_" .. os.date("%Y%m%d_%H%M%S") .. ".json"
 
-    local success, err = pcall(function()
-        writefile(fileName, jsonData)
-    end)
+    -- Simpan file JSON
+    if writefile then
+        local success, err = pcall(function()
+            writefile(fileName, jsonData)
+        end)
 
-    if success then
-        statusLabel.Text = "✅ Saved: "..fileName
-        statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        if success then
+            statusLabel.Text = "✅ Saved to file: " .. fileName
+            statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+        else
+            statusLabel.Text = "❌ Failed to save: " .. tostring(err)
+            statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        end
     else
-        statusLabel.Text = "❌ Save Failed"
-        statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-        warn("Save failed:", err)
+        -- Fallback kalau executor tidak support writefile
+        if setclipboard then
+            setclipboard(jsonData)
+            statusLabel.Text = "📋 Copied JSON (writefile not supported)"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
+        else
+            statusLabel.Text = "❌ Cannot save file (unsupported)"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+        end
     end
 end)
           
