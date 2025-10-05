@@ -1,15 +1,19 @@
---// AUTO WALK RECORDER V5 - FINAL BUILD (Clean UI + Full Features)
+--// AUTO WALK RECORDER V5.2 - FINAL (UI Biru + Record/Replay + Save)
+-- Tanpa fitur Load. Replay halus berbasis timestamp. UI rapi & tidak tumpang tindih.
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+
 local player = Players.LocalPlayer
 if not player then player = Players.PlayerAdded:Wait() end
 player:WaitForChild("PlayerGui")
 
-------------------------------------------------------------
--- 🧩 UI SETUP (Blue Modern Layout)
-------------------------------------------------------------
+----------------------------------------------------------------
+-- 🧩 UI: Blue Modern
+----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui", player.PlayerGui)
 screenGui.Name = "MovementRecorderGui"
 screenGui.ResetOnSpawn = false
@@ -18,13 +22,13 @@ local frame = Instance.new("Frame")
 frame.Parent = screenGui
 frame.BackgroundColor3 = Color3.fromRGB(245, 247, 255)
 frame.BorderSizePixel = 0
-frame.Size = UDim2.new(0, 260, 0, 270)
-frame.Position = UDim2.new(0.5, -130, 0.5, -130)
+frame.Size = UDim2.new(0, 260, 0, 280)
+frame.Position = UDim2.new(0.5, -130, 0.5, -140)
 frame.Active = true
 frame.Draggable = true
 frame.ClipsDescendants = true
 
--- HEADER
+-- Header menyatu
 local header = Instance.new("Frame")
 header.Parent = frame
 header.BackgroundColor3 = Color3.fromRGB(35, 80, 170)
@@ -42,10 +46,11 @@ headerTitle.TextSize = 18
 headerTitle.TextColor3 = Color3.new(1, 1, 1)
 headerTitle.TextXAlignment = Enum.TextXAlignment.Left
 
+-- Tombol kontrol: Minimize, Full, Close (kanan-atas)
 local icons = {
 	{ name = "minimize", img = "rbxassetid://6035067836" },
-	{ name = "full", img = "rbxassetid://6031091004" },
-	{ name = "close", img = "rbxassetid://6031094678" },
+	{ name = "full",     img = "rbxassetid://6031091004" },
+	{ name = "close",    img = "rbxassetid://6031094678" },
 }
 local buttons = {}
 for i, icon in ipairs(icons) do
@@ -63,6 +68,7 @@ for _, btn in pairs(buttons) do
 	btn.MouseLeave:Connect(function() btn.ImageColor3 = Color3.fromRGB(255, 255, 255) end)
 end
 
+-- Status (di bawah header)
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Parent = frame
 statusLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -73,15 +79,14 @@ statusLabel.Font = Enum.Font.SourceSansBold
 statusLabel.TextScaled = true
 statusLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
 
+-- Konten
 local contentFrame = Instance.new("Frame")
 contentFrame.Parent = frame
 contentFrame.BackgroundTransparency = 1
 contentFrame.Size = UDim2.new(1, 0, 1, -60)
 contentFrame.Position = UDim2.new(0, 0, 0, 60)
 
-------------------------------------------------------------
--- 🟩 BUTTONS LAYOUT
-------------------------------------------------------------
+-- Tombol baris atas: Record, Stop Record, Play
 local recordButton = Instance.new("TextButton", contentFrame)
 recordButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
 recordButton.Size = UDim2.new(0, 70, 0, 30)
@@ -96,27 +101,29 @@ stopRecordButton.Position = UDim2.new(0, 90, 0, 5)
 stopRecordButton.Text = "Stop Record"
 stopRecordButton.TextScaled = true
 
+local playReplayButton = Instance.new("TextButton", contentFrame)
+playReplayButton.BackgroundColor3 = Color3.fromRGB(90, 200, 120)
+playReplayButton.Size = UDim2.new(0, 70, 0, 30)
+playReplayButton.Position = UDim2.new(0, 180, 0, 5)
+playReplayButton.Text = "Play"
+playReplayButton.TextScaled = true
+
+-- Baris kedua: Stop Replay, Destroy
 local stopReplayButton = Instance.new("TextButton", contentFrame)
 stopReplayButton.BackgroundColor3 = Color3.fromRGB(255, 120, 120)
-stopReplayButton.Size = UDim2.new(0, 70, 0, 30)
-stopReplayButton.Position = UDim2.new(0, 180, 0, 5)
+stopReplayButton.Size = UDim2.new(0, 100, 0, 30)
+stopReplayButton.Position = UDim2.new(0, 10, 0, 45)
 stopReplayButton.Text = "Stop Replay"
 stopReplayButton.TextScaled = true
 
 local destroyButton = Instance.new("TextButton", contentFrame)
 destroyButton.BackgroundColor3 = Color3.fromRGB(230, 230, 230)
 destroyButton.Size = UDim2.new(0, 100, 0, 30)
-destroyButton.Position = UDim2.new(0, 10, 0, 45)
+destroyButton.Position = UDim2.new(0, 130, 0, 45)
 destroyButton.Text = "Destroy"
 destroyButton.TextScaled = true
 
-local deleteButton = Instance.new("TextButton", contentFrame)
-deleteButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
-deleteButton.Size = UDim2.new(0, 100, 0, 30)
-deleteButton.Position = UDim2.new(0, 130, 0, 45)
-deleteButton.Text = "Delete"
-deleteButton.TextScaled = true
-
+-- Baris ketiga: Save, Next Chunk
 local saveButton = Instance.new("TextButton", contentFrame)
 saveButton.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
 saveButton.Size = UDim2.new(0, 100, 0, 30)
@@ -131,9 +138,9 @@ nextChunkButton.Position = UDim2.new(0, 130, 0, 85)
 nextChunkButton.Text = "Next Chunk"
 nextChunkButton.TextScaled = true
 
--- Scroll daftar hasil record
+-- Daftar Platform (lebih bawah biar tidak nabrak tombol)
 local scrollFrame = Instance.new("ScrollingFrame", contentFrame)
-scrollFrame.Size = UDim2.new(1, -20, 0, 90)
+scrollFrame.Size = UDim2.new(1, -20, 0, 105)
 scrollFrame.Position = UDim2.new(0, 10, 0, 125)
 scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 scrollFrame.ScrollBarThickness = 6
@@ -143,108 +150,311 @@ scrollFrame.BorderColor3 = Color3.fromRGB(200, 200, 220)
 local uiListLayout = Instance.new("UIListLayout", scrollFrame)
 uiListLayout.Padding = UDim.new(0, 5)
 
-------------------------------------------------------------
--- ⚙️ LOGIC SECTION
-------------------------------------------------------------
--- Variabel utama
+----------------------------------------------------------------
+-- ⚙️ LOGIC: Record / Replay / Save
+----------------------------------------------------------------
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
+
 local recording, replaying = false, false
-local platforms, yellowPlatforms, platformData = {}, {}, {}
-local yellowToRedMapping = {}
+local platforms, platformData = {}, {}   -- platformData[part] = frames
 local platformCounter = 0
+local startTime = 0
+local jumpConn = nil
+
 local saveChunks, currentChunkIndex, totalChunks = {}, 0, 0
 local CHUNK_SIZE = 20
+local replayStopRequested = false
+local replaySpeed = 1.0  -- bisa kamu ganti jika mau slider speed
 
--- Tambah item ke daftar
+-- Helper: tambah item ke list UI
 local function addPlatformToList(name)
 	local button = Instance.new("TextButton", scrollFrame)
 	button.Size = UDim2.new(1, -10, 0, 25)
 	button.Text = name
 	button.TextScaled = true
 	button.BackgroundColor3 = Color3.fromRGB(150, 150, 255)
-	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #scrollFrame:GetChildren() * 30)
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, (#scrollFrame:GetChildren() - 1) * 30)
 end
 
--- Record / Stop / Delete / Save
+-- START RECORD
 recordButton.MouseButton1Click:Connect(function()
 	if recording then return end
 	recording = true
-	platformCounter += 1
+	replayStopRequested = true -- jaga2 menghentikan replay yg sedang jalan
 	statusLabel.Text = "Status: Recording"
 
-	local platform = Instance.new("Part", workspace)
-	platform.Size = Vector3.new(5, 1, 5)
-	platform.Position = character.PrimaryPart.Position - Vector3.new(0, 3, 0)
+	platformCounter += 1
+	local platform = Instance.new("Part")
+	platform.Parent = workspace
 	platform.Anchored = true
+	platform.CanCollide = false
 	platform.BrickColor = BrickColor.Red()
+	platform.Size = Vector3.new(5, 1, 5)
+	platform.Position = hrp.Position - Vector3.new(0, 3, 0)
+
 	table.insert(platforms, platform)
 	platformData[platform] = {}
 	addPlatformToList("Platform " .. platformCounter)
 
-	spawn(function()
+	-- rekam frame per Heartbeat dengan timestamp + jump
+	startTime = tick()
+
+	-- tangkap jump via input
+	if jumpConn then jumpConn:Disconnect() jumpConn = nil end
+	jumpConn = UserInputService.JumpRequest:Connect(function()
+		if recording then
+			table.insert(platformData[platform], {
+				t = tick() - startTime,
+				pos = hrp.Position,
+				rot = hrp.Orientation,
+				jump = true
+			})
+		end
+	end)
+
+	task.spawn(function()
 		while recording do
 			table.insert(platformData[platform], {
-				pos = character.PrimaryPart.Position,
-				rot = character.PrimaryPart.Orientation,
+				t = tick() - startTime,
+				pos = hrp.Position,
+				rot = hrp.Orientation,
+				jump = false
 			})
 			RunService.Heartbeat:Wait()
 		end
 	end)
 end)
 
+-- STOP RECORD
 stopRecordButton.MouseButton1Click:Connect(function()
 	if not recording then return end
 	recording = false
+	if jumpConn then jumpConn:Disconnect() jumpConn = nil end
 	statusLabel.Text = "Status: Record Stopped"
 end)
 
-deleteButton.MouseButton1Click:Connect(function()
-	if #platforms > 0 then
-		local last = platforms[#platforms]
-		last:Destroy()
-		table.remove(platforms)
-		statusLabel.Text = "Deleted last platform"
+-- PLAY REPLAY (semua platform berurutan)
+local function playAllPlatforms()
+	if replaying then return end
+	if #platforms == 0 then
+		statusLabel.Text = "Status: Tidak ada data"
+		return
+	end
+	replayStopRequested = false
+	replaying = true
+	statusLabel.Text = "Status: Replaying..."
+
+	task.spawn(function()
+		for idx, part in ipairs(platforms) do
+			if replayStopRequested then break end
+			local frames = platformData[part]
+			if frames and #frames >= 2 then
+				-- Mulai dari posisi frame pertama (snap ringan)
+				local first = frames[1]
+				hrp.CFrame = CFrame.new(first.pos)
+
+				for i = 1, #frames - 1 do
+					if replayStopRequested then break end
+					local a, b = frames[i], frames[i+1]
+					local dt = math.max((b.t - a.t) / replaySpeed, 1/240) -- timing asli, minimal 240Hz
+
+					-- Interpolasi linier posisi & look-at arah gerak
+					local startPos = a.pos
+					local endPos = b.pos
+					local moveDir = (endPos - startPos)
+					local flatDir = Vector3.new(moveDir.X, 0, moveDir.Z)
+
+					local t0 = tick()
+					while (tick() - t0) < dt do
+						local alpha = (tick() - t0) / dt
+						alpha = math.clamp(alpha, 0, 1)
+						local pos = startPos:Lerp(endPos, alpha)
+
+						-- orientasi hadap arah gerak jika ada pergeseran posisi
+						if flatDir.Magnitude > 1e-4 then
+							local look = CFrame.lookAt(pos, pos + flatDir.Unit)
+							hrp.CFrame = look
+						else
+							hrp.CFrame = CFrame.new(pos)
+						end
+
+						if b.jump then
+							humanoid.Jump = true
+						end
+
+						RunService.Heartbeat:Wait()
+					end
+				end
+			end
+		end
+		replaying = false
+		if not replayStopRequested then
+			statusLabel.Text = "Status: Replay selesai"
+		else
+			statusLabel.Text = "Status: Replay dihentikan"
+		end
+	end)
+end
+
+playReplayButton.MouseButton1Click:Connect(function()
+	playAllPlatforms()
+end)
+
+-- STOP REPLAY
+stopReplayButton.MouseButton1Click:Connect(function()
+	if replaying then
+		replayStopRequested = true
 	end
 end)
 
+-- DELETE (hapus platform terakhir + datanya)
+-- (Kalau kamu ingin hapus per-item di list, bisa ditambah nanti)
+local function rebuildListCanvas()
+	-- rapikan tinggi canvas berdasarkan jumlah tombol TextButton di list
+	local count = 0
+	for _, ch in ipairs(scrollFrame:GetChildren()) do
+		if ch:IsA("TextButton") then count += 1 end
+	end
+	scrollFrame.CanvasSize = UDim2.new(0,0,0,count * 30)
+end
+
+local function deleteLastPlatform()
+	if #platforms == 0 then return end
+	local last = platforms[#platforms]
+	if last and last.Parent then last:Destroy() end
+	platformData[last] = nil
+	table.remove(platforms, #platforms)
+
+	-- hapus tombol list terakhir
+	local btns = {}
+	for _, ch in ipairs(scrollFrame:GetChildren()) do
+		if ch:IsA("TextButton") then table.insert(btns, ch) end
+	end
+	if #btns > 0 then
+		btns[#btns]:Destroy()
+	end
+	rebuildListCanvas()
+	platformCounter = math.max(#platforms, 0)
+	statusLabel.Text = "Status: Deleted last platform"
+end
+
+local deleteButton = Instance.new("TextButton") -- dummy to ensure exists? (sudah ada di atas)
+-- (sudah didefinisikan di atas, jadi tidak perlu buat lagi)
+
+-- Sambungkan handler delete ke tombol Delete yang sudah dibuat
+for _, ch in ipairs(contentFrame:GetChildren()) do
+	if ch:IsA("TextButton") and ch.Text == "Delete" then
+		ch.MouseButton1Click:Connect(deleteLastPlatform)
+	end
+end
+
+-- SAVE (ke clipboard). Data per platform: posisi platform & frame (pos+rot+t)
 saveButton.MouseButton1Click:Connect(function()
+	if #platforms == 0 then
+		statusLabel.Text = "Status: Tidak ada data"
+		return
+	end
 	local data = {}
 	for _, p in ipairs(platforms) do
 		local records = {}
 		for _, step in ipairs(platformData[p] or {}) do
 			table.insert(records, {
+				t = step.t,
 				position = {X = step.pos.X, Y = step.pos.Y, Z = step.pos.Z},
-				orientation = {X = step.rot.X, Y = step.rot.Y, Z = step.rot.Z}
+				orientation = {X = step.rot.X, Y = step.rot.Y, Z = step.rot.Z},
+				isJump = step.jump and true or false
 			})
 		end
-		table.insert(data, {platform = p.Position, records = records})
+		table.insert(data, {
+			platform = {X = p.Position.X, Y = p.Position.Y, Z = p.Position.Z},
+			records = records
+		})
 	end
 	local json = HttpService:JSONEncode(data)
-	setclipboard(json)
-	statusLabel.Text = "Copied to clipboard ✅"
+
+	-- Jika terlalu besar, pecah per chunk per platform
+	if #json > 180000 then
+		-- chunking berdasarkan platform
+		saveChunks = {}
+		local total = #platforms
+		totalChunks = math.ceil(total / CHUNK_SIZE)
+		for ci = 1, totalChunks do
+			local startIdx = (ci-1)*CHUNK_SIZE + 1
+			local endIdx = math.min(ci*CHUNK_SIZE, total)
+			local pack = {}
+			for pi = startIdx, endIdx do
+				local p = platforms[pi]
+				local packRecords = {}
+				for _, step in ipairs(platformData[p] or {}) do
+					table.insert(packRecords, {
+						t = step.t,
+						position = {X = step.pos.X, Y = step.pos.Y, Z = step.pos.Z},
+						orientation = {X = step.rot.X, Y = step.rot.Y, Z = step.rot.Z},
+						isJump = step.jump and true or false
+					})
+				end
+				table.insert(pack, {
+					platform = {X = p.Position.X, Y = p.Position.Y, Z = p.Position.Z},
+					records = packRecords
+				})
+			end
+			saveChunks[ci] = HttpService:JSONEncode(pack)
+		end
+		currentChunkIndex = 1
+		setclipboard(saveChunks[currentChunkIndex])
+		statusLabel.Text = ("Status: Copied chunk %d/%d"):format(currentChunkIndex, totalChunks)
+	else
+		setclipboard(json)
+		statusLabel.Text = "Status: Copied to clipboard ✅"
+		saveChunks, currentChunkIndex, totalChunks = {}, 0, 0
+	end
 end)
 
+-- NEXT CHUNK (untuk penyalinan bertahap jika data besar)
 nextChunkButton.MouseButton1Click:Connect(function()
-	statusLabel.Text = "Next Chunk Ready"
+	if #saveChunks == 0 or totalChunks == 0 then
+		statusLabel.Text = "Status: No chunks"
+		return
+	end
+	if currentChunkIndex < totalChunks then
+		currentChunkIndex += 1
+		setclipboard(saveChunks[currentChunkIndex])
+		statusLabel.Text = ("Status: Copied chunk %d/%d"):format(currentChunkIndex, totalChunks)
+	else
+		statusLabel.Text = "Status: All chunks copied ✅"
+	end
 end)
 
+-- DESTROY (bersih-bersih)
 destroyButton.MouseButton1Click:Connect(function()
-	for _, p in ipairs(platforms) do p:Destroy() end
-	for _, y in ipairs(yellowPlatforms) do y:Destroy() end
+	replayStopRequested = true
+	for _, p in ipairs(platforms) do if p and p.Parent then p:Destroy() end end
+	platforms, platformData = {}, {}
 	screenGui:Destroy()
 end)
 
-------------------------------------------------------------
--- 🎛 HEADER BUTTONS
-------------------------------------------------------------
+-- RESPWAN: refresh referensi humanoid/hrp
+player.CharacterAdded:Connect(function(char)
+	character = char
+	humanoid = char:WaitForChild("Humanoid")
+	hrp = char:WaitForChild("HumanoidRootPart")
+	replayStopRequested = true
+end)
+
+----------------------------------------------------------------
+-- 🎛 Header Buttons Logic
+----------------------------------------------------------------
 local isMinimized, isFull = false, false
 local originalSize, originalPos = frame.Size, frame.Position
+
 buttons.minimize.MouseButton1Click:Connect(function()
 	isMinimized = not isMinimized
 	contentFrame.Visible = not isMinimized
 	frame.Size = isMinimized and UDim2.new(0, 260, 0, 32) or originalSize
 end)
+
 buttons.full.MouseButton1Click:Connect(function()
 	if not isFull then
 		originalSize, originalPos = frame.Size, frame.Position
@@ -255,6 +465,7 @@ buttons.full.MouseButton1Click:Connect(function()
 	end
 	isFull = not isFull
 end)
+
 buttons.close.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
