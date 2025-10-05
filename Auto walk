@@ -19,28 +19,28 @@ screenGui.Parent = player.PlayerGui
 screenGui.ResetOnSpawn = false
 screenGui.Name = "MovementRecorderGui"
 
--- Create Frame
+-- === FRAME UTAMA ===
 local frame = Instance.new("Frame")
 frame.Parent = screenGui
-frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-frame.Size = UDim2.new(0, 220, 0, 200)
-frame.Position = UDim2.new(0.5, -110, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(240, 243, 255)
+frame.Size = UDim2.new(0, 240, 0, 220)
+frame.Position = UDim2.new(0.5, -120, 0.5, -110)
+frame.BorderSizePixel = 0
 frame.Active = true
 frame.Draggable = true
+frame.ClipsDescendants = true
 
--- === HEADER DAN TOMBOL KONTROL ===
+-- === HEADER ===
 local header = Instance.new("Frame")
 header.Parent = frame
-header.Size = UDim2.new(1, 0, 0, 25)
-header.Position = UDim2.new(0, 0, 0, -25)
+header.Size = UDim2.new(1, 0, 0, 28)
+header.Position = UDim2.new(0, 0, 0, 0)
 header.BackgroundColor3 = Color3.fromRGB(30, 60, 120)
 header.BorderSizePixel = 0
-header.Active = true
-header.Draggable = true
 
 local headerTitle = Instance.new("TextLabel")
 headerTitle.Parent = header
-headerTitle.Size = UDim2.new(1, -90, 1, 0)
+headerTitle.Size = UDim2.new(1, -80, 1, 0)
 headerTitle.Position = UDim2.new(0, 10, 0, 0)
 headerTitle.BackgroundTransparency = 1
 headerTitle.Text = "Movement Recorder"
@@ -49,79 +49,80 @@ headerTitle.TextXAlignment = Enum.TextXAlignment.Left
 headerTitle.TextScaled = true
 headerTitle.Font = Enum.Font.SourceSansBold
 
--- Tombol Close
-local closeButton = Instance.new("ImageButton")
-closeButton.Parent = header
-closeButton.Image = "rbxassetid://6031094678" -- icon close (X)
-closeButton.Size = UDim2.new(0, 18, 0, 18)
-closeButton.Position = UDim2.new(1, -25, 0.5, -9)
-closeButton.BackgroundTransparency = 1
+-- Tombol kontrol (Close, Full, Minimize)
+local icons = {
+	{ name = "minimize", img = "rbxassetid://6035067836" },
+	{ name = "full", img = "rbxassetid://6031091004" },
+	{ name = "close", img = "rbxassetid://6031094678" },
+}
 
--- Tombol Fullscreen
-local fullButton = Instance.new("ImageButton")
-fullButton.Parent = header
-fullButton.Image = "rbxassetid://6031091004" -- icon expand
-fullButton.Size = UDim2.new(0, 18, 0, 18)
-fullButton.Position = UDim2.new(1, -50, 0.5, -9)
-fullButton.BackgroundTransparency = 1
+local buttons = {}
+for i, icon in ipairs(icons) do
+	local btn = Instance.new("ImageButton")
+	btn.Parent = header
+	btn.Image = icon.img
+	btn.Size = UDim2.new(0, 20, 0, 20)
+	btn.Position = UDim2.new(1, -25 * (4 - i), 0.5, -10)
+	btn.BackgroundTransparency = 1
+	btn.Name = icon.name
+	buttons[icon.name] = btn
+end
 
--- Tombol Minimize
-local minimizeButton = Instance.new("ImageButton")
-minimizeButton.Parent = header
-minimizeButton.Image = "rbxassetid://6035067836" -- icon minimize
-minimizeButton.Size = UDim2.new(0, 18, 0, 18)
-minimizeButton.Position = UDim2.new(1, -75, 0.5, -9)
-minimizeButton.BackgroundTransparency = 1
+-- Hover efek lembut
+for _, btn in pairs(buttons) do
+	btn.MouseEnter:Connect(function()
+		btn.ImageColor3 = Color3.fromRGB(180, 210, 255)
+	end)
+	btn.MouseLeave:Connect(function()
+		btn.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	end)
+end
 
--- Logika tombol
-local isMinimized = false
-local isFullSize = false
-local originalSize = frame.Size
-local originalPosition = frame.Position
+-- === STATUS LABEL (DI BAWAH HEADER) ===
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Parent = frame
+statusLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+statusLabel.Size = UDim2.new(1, 0, 0, 25)
+statusLabel.Position = UDim2.new(0, 0, 0, 28)
+statusLabel.Text = "Status: Idle"
+statusLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+statusLabel.TextScaled = true
+statusLabel.Font = Enum.Font.SourceSansBold
 
--- Minimize
-minimizeButton.MouseButton1Click:Connect(function()
+-- === PENYESUAIAN KONTROL ===
+local contentFrame = Instance.new("Frame")
+contentFrame.Parent = frame
+contentFrame.BackgroundTransparency = 1
+contentFrame.Size = UDim2.new(1, 0, 1, -53)
+contentFrame.Position = UDim2.new(0, 0, 0, 53)
+
+-- === LOGIKA TOMBOL ===
+local isMinimized, isFull = false, false
+local originalSize, originalPos = frame.Size, frame.Position
+
+buttons.minimize.MouseButton1Click:Connect(function()
 	isMinimized = not isMinimized
-	for _, obj in ipairs(frame:GetChildren()) do
-		if obj ~= header then
-			obj.Visible = not isMinimized
-		end
-	end
-	frame.Size = isMinimized and UDim2.new(0, 220, 0, 25) or originalSize
+	contentFrame.Visible = not isMinimized
+	frame.Size = isMinimized and UDim2.new(0, 240, 0, 28) or originalSize
 end)
 
--- Fullscreen
-fullButton.MouseButton1Click:Connect(function()
-	if not isFullSize then
+buttons.full.MouseButton1Click:Connect(function()
+	if not isFull then
 		originalSize = frame.Size
-		originalPosition = frame.Position
+		originalPos = frame.Position
 		frame.Size = UDim2.new(0.9, 0, 0.9, 0)
 		frame.Position = UDim2.new(0.05, 0, 0.05, 0)
 	else
 		frame.Size = originalSize
-		frame.Position = originalPosition
+		frame.Position = originalPos
 	end
-	isFullSize = not isFullSize
+	isFull = not isFull
 end)
 
--- Close
-closeButton.MouseButton1Click:Connect(function()
+buttons.close.MouseButton1Click:Connect(function()
 	screenGui:Destroy()
 end)
 
--- Efek hover ringan (tombol glow)
-local function addHoverEffect(button)
-	button.MouseEnter:Connect(function()
-		button.ImageColor3 = Color3.fromRGB(150, 200, 255)
-	end)
-	button.MouseLeave:Connect(function()
-		button.ImageColor3 = Color3.fromRGB(255, 255, 255)
-	end)
-end
-
-addHoverEffect(closeButton)
-addHoverEffect(fullButton)
-addHoverEffect(minimizeButton)
 
 -- Create Buttons
 local recordButton = Instance.new("TextButton")
