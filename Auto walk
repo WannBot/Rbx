@@ -4,28 +4,27 @@ local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 
--- ⚙️ Rayfield UI
+-- === Rayfield UI ===
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 local Window = Rayfield:CreateWindow({
 	Name = "Auto Walk V4",
-	LoadingTitle = "Init Auto Walk",
+	LoadingTitle = "Smooth Record",
 	LoadingSubtitle = "Record • Replay • Save • Load",
-	KeySystem = false
+	KeySystem = false,
 })
 local Tab = Window:CreateTab("Path Control", 4483362458)
 
--- ⚙️ State
+-- === State ===
 local hrp, hum
 local recording = false
 local playing = false
-local pathData = {}
-local recordConn, playConn
-local startTime
+local recordData = {}
+local BV
+local playConn
+local saveFile = "autowalk_v4.json"
 local playSpeed = 1
-local saveFile = "autowalk_path.json"
-local BV -- BodyVelocity instance
 
--- === Helper
+-- === Helper ===
 local function bindChar()
 	local char = player.Character or player.CharacterAdded:Wait()
 	hum = char:WaitForChild("Humanoid")
@@ -53,34 +52,27 @@ local function cleanupBV()
 end
 
 ----------------------------------------------------------
--- === Record Path ===
+-- === RECORD ===
 ----------------------------------------------------------
 local function startRecord()
 	if recording then return end
 	recording = true
-	pathData = {}
-	startTime = tick()
-	print("[AutoWalk] ▶ Start recording...")
+	recordData = {}
+	print("[AutoWalkV4] ▶ Mulai merekam...")
 
-	recordConn = RunService.Heartbeat:Connect(function()
-		if recording and hrp then
-			table.insert(pathData, {
-				t = tick() - startTime,
-				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				vel = hum.MoveDirection.Magnitude,
-				type = "move"
+	task.spawn(function()
+		local lastPos = hrp.Position
+		while recording do
+			local currentPos = hrp.Position
+			local delta = (currentPos - lastPos)
+			local timeNow = tick()
+			table.insert(recordData, {
+				pos = {currentPos.X, currentPos.Y, currentPos.Z},
+				time = timeNow,
+				jump = hum:GetState() == Enum.HumanoidStateType.Jumping
 			})
-		end
-	end)
-
-	hum.StateChanged:Connect(function(_, new)
-		if recording and new == Enum.HumanoidStateType.Jumping then
-			table.insert(pathData, {
-				t = tick() - startTime,
-				pos = {hrp.Position.X, hrp.Position.Y, hrp.Position.Z},
-				vel = 0,
-				type = "jump"
-			})
+			lastPos = currentPos
+			task.wait(0.05) -- smooth sampling
 		end
 	end)
 end
@@ -88,106 +80,118 @@ end
 local function stopRecord()
 	if not recording then return end
 	recording = false
-	if recordConn then recordConn:Disconnect() recordConn = nil end
-	print("[AutoWalk] ⏹ Stop recording. Frames:", #pathData)
+	print("[AutoWalkV4] ⏹ Stop. Total frame:", #recordData)
 end
 
 ----------------------------------------------------------
--- === Play Path ===
+-- === PLAYBACK ===
 ----------------------------------------------------------
-local function playPath()
-	if #pathData == 0 then
-		warn("[AutoWalk] Tidak ada data record!")
+local function playRecord()
+	if #recordData == 0 then
+		warn("[AutoWalkV4] Tidak ada data rekaman!")
 		return
 	end
 	if playing then return end
 	playing = true
-	print("[AutoWalk] ▶ Replaying... steps:", #pathData)
+	print("[AutoWalkV4] ▶ Memutar ulang... (" .. #recordData .. " frame)")
 
 	ensureBV()
-	local playStart = tick()
 	local i = 1
+	local lastPos = hrp.Position
 
-	if playConn then playConn:Disconnect() end
-	playConn = RunService.Heartbeat:Connect(function(delta)
+	playConn = RunService.Heartbeat:Connect(function()
 		if not playing then return end
-		local elapsed = (tick() - playStart) * playSpeed
-
-		while i <= #pathData and elapsed >= pathData[i].t do
-			local step = pathData[i]
-			if step.type == "jump" then
-				hum.Jump = true
-			end
-			i += 1
-		end
-
-		if i > #pathData then
+		if i >= #recordData then
 			cleanupBV()
-			playing = false
 			playConn:Disconnect()
-			print("[AutoWalk] ✅ Replay selesai.")
+			playing = false
+			print("[AutoWalkV4] ✅ Replay selesai.")
 			return
 		end
 
-		local stepNow = pathData[i]
-		if stepNow and stepNow.type == "move" then
-			local target = Vector3.new(stepNow.pos[1], stepNow.pos[2], stepNow.pos[3])
-			local dir = (target - hrp.Position)
-			local horizontal = Vector3.new(dir.X, 0, dir.Z)
-			local dist = horizontal.Magnitude
-			local baseSpeed = (hum.WalkSpeed or 16) * playSpeed
+		local step = recordData[i]
+		local nextStep = recordData[i + 1]
+		if not step or not nextStep then return end
 
-			if dist > 1 then
-				local moveDir = horizontal.Unit * baseSpeed
-				BV.Velocity = Vector3.new(moveDir.X, 0, moveDir.Z)
-				-- Rotasi ke arah
-				local lookAt = hrp.Position + horizontal
-				hrp.CFrame = CFrame.lookAt(hrp.Position, lookAt)
-			else
-				BV.Velocity = Vector3.zero
-			end
+		local target = Vector3.new(nextStep.pos[1], nextStep.pos[2], nextStep.pos[3])
+		local move = (target - hrp.Position)
+		local flatDir = Vector3.new(move.X, 0, move.Z)
+		local dist = flatDir.Magnitude
+		local baseSpeed = (hum.WalkSpeed or 16) * playSpeed
+
+		if dist > 0.5 then
+			local vel = flatDir.Unit * baseSpeed
+			BV.Velocity = Vector3.new(vel.X, 0, vel.Z)
+			hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + flatDir)
+		else
+			BV.Velocity = Vector3.zero
 		end
+
+		if step.jump then
+			hum.Jump = true
+		end
+
+		i += 1
 	end)
 end
 
 local function stopPlay()
 	if not playing then return end
 	playing = false
-	if playConn then playConn:Disconnect() playConn = nil end
+	if playConn then playConn:Disconnect() end
 	cleanupBV()
-	print("[AutoWalk] ⏹ Stop play.")
+	print("[AutoWalkV4] ⏹ Replay dihentikan.")
 end
 
 ----------------------------------------------------------
--- === Save / Load Path JSON ===
+-- === SAVE / LOAD JSON ===
 ----------------------------------------------------------
-local function savePath()
-	if #pathData == 0 then
-		warn("[AutoWalk] Tidak ada data disimpan!")
+local function saveRecord()
+	if #recordData == 0 then
+		warn("[AutoWalkV4] Tidak ada data untuk disimpan!")
 		return
 	end
-	writefile(saveFile, HttpService:JSONEncode(pathData))
-	print("[AutoWalk] 💾 Disimpan ke file:", saveFile)
+	writefile(saveFile, HttpService:JSONEncode(recordData))
+	print("[AutoWalkV4] 💾 Disimpan ke:", saveFile)
 end
 
-local function loadPath()
+local function loadRecord()
 	if not isfile(saveFile) then
-		warn("[AutoWalk] File", saveFile, "tidak ditemukan!")
+		warn("[AutoWalkV4] File tidak ditemukan!")
 		return
 	end
-	pathData = HttpService:JSONDecode(readfile(saveFile))
-	print("[AutoWalk] 📂 Path dimuat:", #pathData, "steps.")
+	local data = readfile(saveFile)
+	recordData = HttpService:JSONDecode(data)
+	print("[AutoWalkV4] 📂 Data dimuat:", #recordData, "frame.")
 end
 
 ----------------------------------------------------------
--- === UI Buttons ===
+-- === UI (Rayfield) ===
 ----------------------------------------------------------
-Tab:CreateButton({ Name = "▶ Start Record", Callback = startRecord })
-Tab:CreateButton({ Name = "⏹ Stop Record", Callback = stopRecord })
-Tab:CreateButton({ Name = "🎬 Play Path", Callback = playPath })
-Tab:CreateButton({ Name = "🛑 Stop Play", Callback = stopPlay })
-Tab:CreateButton({ Name = "💾 Save Path", Callback = savePath })
-Tab:CreateButton({ Name = "📂 Load Path", Callback = loadPath })
+Tab:CreateButton({
+	Name = "▶ Start Record",
+	Callback = startRecord
+})
+Tab:CreateButton({
+	Name = "⏹ Stop Record",
+	Callback = stopRecord
+})
+Tab:CreateButton({
+	Name = "🎬 Play Path",
+	Callback = playRecord
+})
+Tab:CreateButton({
+	Name = "🛑 Stop Play",
+	Callback = stopPlay
+})
+Tab:CreateButton({
+	Name = "💾 Save Path",
+	Callback = saveRecord
+})
+Tab:CreateButton({
+	Name = "📂 Load Path",
+	Callback = loadRecord
+})
 
 Tab:CreateSlider({
 	Name = "Replay Speed",
@@ -197,7 +201,6 @@ Tab:CreateSlider({
 	CurrentValue = 1,
 	Callback = function(v)
 		playSpeed = v
-		print("[AutoWalk] Replay Speed:", v)
 	end
 })
 
@@ -223,4 +226,4 @@ Tab:CreateSlider({
 	end
 })
 
-print("[AutoWalk] ✅ Loaded successfully with Rayfield UI.")
+print("[AutoWalkV4] ✅ Loaded successfully with smooth recording Rayfield UI.")
