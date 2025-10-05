@@ -938,36 +938,6 @@ saveButton.MouseButton1Click:Connect(function()
     end
 end)
           
-        -- Find and add only the yellow platforms that map to these red platforms  
-        for i, mapping in ipairs(allData.mappings) do  
-            if mapping >= startIndex and mapping <= endIndex then  
-                table.insert(chunk.yellowPlatforms, allData.yellowPlatforms[i])  
-                -- Adjust the mapping to be relative to the chunk  
-                table.insert(chunk.mappings, mapping - startIndex + 1)  
-            end  
-        end  
-          
-        -- Add the chunk  
-        saveChunks[chunkIndex] = HttpService:JSONEncode(chunk)  
-    end  
-      
-    -- Save the first chunk  
-    currentChunkIndex = 1  
-    setclipboard(saveChunks[currentChunkIndex])  
-    statusLabel.Text = string.format("Chunk %d/%d copied. Save it, then press Save again for next chunk",   
-                                    currentChunkIndex, totalChunks)  
-    statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)  
-else  
-    -- If data fits in clipboard, just save it directly  
-    setclipboard(jsonData)  
-    statusLabel.Text = "Platform data copied to clipboard"  
-    statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)  
-    saveChunks = {}  -- Clear any previous chunks  
-    currentChunkIndex = 0  
-    totalChunks = 0  
-end
-
-end)
 
 -- Add a new button for navigating chunks
 local nextChunkButton = Instance.new("TextButton")
