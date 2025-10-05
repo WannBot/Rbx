@@ -891,17 +891,6 @@ local currentChunkIndex = 0
 local totalChunks = 0
 local CHUNK_SIZE = 20 -- This is the number of platforms per chunk, adjust based on your clipboard size limits
 
--- Replace your existing saveButton.MouseButton1Click with this:
-local saveButton = Instance.new("TextButton")
-saveButton.Parent = frame
-saveButton.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
-saveButton.Size = UDim2.new(0, 90, 0, 30)
-saveButton.Position = UDim2.new(0, 10, 0, 90)
-saveButton.Text = "Save"
-saveButton.TextScaled = true
-
-saveButton.MouseButton1Click:Connect(function()
-
 -- === Tombol Save ke File JSON ===
 local saveToFileButton = Instance.new("TextButton")
 saveToFileButton.Parent = frame
