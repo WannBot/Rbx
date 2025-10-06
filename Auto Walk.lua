@@ -989,6 +989,43 @@ statusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
 end
 end)
 
+-- === Resize Handle ===
+local UserInputService = game:GetService("UserInputService")
+
+local resizeHandle = Instance.new("Frame")
+resizeHandle.Parent = frame
+resizeHandle.Size = UDim2.new(0, 15, 0, 15)
+resizeHandle.AnchorPoint = Vector2.new(1, 1)
+resizeHandle.Position = UDim2.new(1, 0, 1, 0)
+resizeHandle.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
+resizeHandle.BorderSizePixel = 0
+resizeHandle.Active = true
+resizeHandle.Draggable = false
+
+local resizing = false
+local dragStart, startSize
+
+resizeHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		resizing = true
+		dragStart = input.Position
+		startSize = frame.Size
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = input.Position - dragStart
+		frame.Size = UDim2.new(startSize.X.Scale, startSize.X.Offset + delta.X, startSize.Y.Scale, startSize.Y.Offset + delta.Y)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		resizing = false
+	end
+end)
+
 -- TextLabel for instructions
 local pasteLabel = Instance.new("TextLabel")
 pasteLabel.Parent = frame
