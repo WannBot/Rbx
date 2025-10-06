@@ -36,7 +36,7 @@ header.Position = UDim2.new(0, 0, 0, -50)
 header.BackgroundColor3 = Color3.fromRGB(30, 60, 120)
 header.BorderSizePixel = 0
 header.Active = false
-header.Draggable = false
+header.Draggable = true
 
 local headerTitle = Instance.new("TextLabel")
 headerTitle.Parent = header
