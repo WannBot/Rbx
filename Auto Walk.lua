@@ -23,14 +23,10 @@ screenGui.Name = "MovementRecorderGui"
 local frame = Instance.new("Frame")
 frame.Parent = screenGui
 frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-frame.Size = UDim2.new(0, 180, 0, 200)  -- lebih kecil dan proporsional
-frame.Position = UDim2.new(0.5, -100, 0.5, -80)
+frame.Size = UDim2.new(0, 220, 0, 200)
+frame.Position = UDim2.new(0.5, -110, 0.5, -100)
 frame.Active = true
 frame.Draggable = true
-
-local uiScale = Instance.new("UIScale")
-uiScale.Parent = frame
-uiScale.Scale = 0.9 -- kecilkan isi 90% agar pas di frame baru
 
 -- === HEADER DAN TOMBOL KONTROL ===
 local header = Instance.new("Frame")
