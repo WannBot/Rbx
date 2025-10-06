@@ -989,36 +989,53 @@ statusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
 end
 end)
 
--- === Resize Handle ===
+-- === Resize Handle (FIXED VERSION) ===
 local UserInputService = game:GetService("UserInputService")
 
+-- buat handle pojok kanan bawah
 local resizeHandle = Instance.new("Frame")
 resizeHandle.Parent = frame
-resizeHandle.Size = UDim2.new(0, 15, 0, 15)
+resizeHandle.Size = UDim2.new(0, 16, 0, 16)
 resizeHandle.AnchorPoint = Vector2.new(1, 1)
 resizeHandle.Position = UDim2.new(1, 0, 1, 0)
 resizeHandle.BackgroundColor3 = Color3.fromRGB(100, 150, 255)
 resizeHandle.BorderSizePixel = 0
 resizeHandle.Active = true
-resizeHandle.Draggable = false
+
+-- optional: garis diagonal untuk efek grip
+local grip = Instance.new("ImageLabel")
+grip.Parent = resizeHandle
+grip.BackgroundTransparency = 1
+grip.Size = UDim2.new(1, 0, 1, 0)
+grip.Image = "rbxassetid://6031302912" -- icon garis diagonal
+grip.ImageTransparency = 0.2
 
 local resizing = false
-local dragStart, startSize
+local dragStart
+local startSize
 
 resizeHandle.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		resizing = true
 		dragStart = input.Position
 		startSize = frame.Size
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				resizing = false
+			end
+		end)
 	end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
 	if resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
 		local delta = input.Position - dragStart
-		frame.Size = UDim2.new(startSize.X.Scale, startSize.X.Offset + delta.X, startSize.Y.Scale, startSize.Y.Offset + delta.Y)
+		local newX = math.max(220, startSize.X.Offset + delta.X) -- minimal width 220
+		local newY = math.max(200, startSize.Y.Offset + delta.Y) -- minimal height 200
+		frame.Size = UDim2.new(0, newX, 0, newY)
 	end
 end)
+
 
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
